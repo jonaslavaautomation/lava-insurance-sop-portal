@@ -78,18 +78,18 @@ export default function AdminLibrary() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search SOPs..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
             />
           </div>
-          <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white">
+          <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white">
             <option value="all">All Companies</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white">
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white">
             <option value="all">All Categories</option>
             {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
           </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white">
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white">
             <option value="all">All Statuses</option>
             <option value="published">Published</option>
             <option value="pending">Pending Review</option>
@@ -132,7 +132,7 @@ export default function AdminLibrary() {
                   <td className="px-5 py-3.5 text-sm text-slate-600 hidden md:table-cell">v{doc.version}</td>
                   <td className="px-5 py-3.5">{statusBadge(doc.status)}</td>
                   <td className="px-5 py-3.5 text-right">
-                    <Link to={`/admin/review/${doc.id}`} className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
+                    <Link to={`/admin/review/${doc.id}`} className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 font-medium">
                       <Eye className="w-4 h-4" /> Review
                     </Link>
                   </td>

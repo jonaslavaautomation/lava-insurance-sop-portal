@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   }, []);
 
   const cards = [
-    { label: 'Insurance Companies', value: stats.companies, icon: Building2, color: 'blue' },
+    { label: 'Insurance Companies', value: stats.companies, icon: Building2, color: 'brand' },
     { label: 'Total SOP Documents', value: stats.documents, icon: FileText, color: 'slate' },
     { label: 'Published SOPs', value: stats.published, icon: TrendingUp, color: 'green' },
     { label: 'Pending Reviews', value: stats.pending, icon: FileCheck, color: 'amber' },
@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   ];
 
   const colorMap: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    brand: 'bg-brand-50 text-brand-600 border-brand-100',
     slate: 'bg-slate-100 text-slate-600 border-slate-200',
     green: 'bg-green-50 text-green-600 border-green-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
@@ -83,7 +83,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-slate-900">Recent Uploads</h2>
-            <Link to="/admin/library" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
+            <Link to="/admin/library" className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1">
               View all <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -113,19 +113,19 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h2 className="text-base font-semibold text-slate-900 mb-4">Quick Actions</h2>
           <div className="space-y-3">
-            <Link to="/admin/upload" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all group">
+            <Link to="/admin/upload" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-brand-300 hover:bg-brand-50/50 transition-all group">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-blue-600" />
+                <div className="w-9 h-9 bg-brand-50 rounded-lg flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-brand-600" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-900">Upload New SOP</p>
                   <p className="text-xs text-slate-400">Add a new SOP document</p>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-brand-600 transition-colors" />
             </Link>
-            <Link to="/admin/companies" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all group">
+            <Link to="/admin/companies" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-brand-300 hover:bg-brand-50/50 transition-all group">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center">
                   <Building2 className="w-4 h-4 text-slate-600" />
@@ -135,9 +135,9 @@ export default function AdminDashboard() {
                   <p className="text-xs text-slate-400">Create a new company entry</p>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-brand-600 transition-colors" />
             </Link>
-            <Link to="/admin/review" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all group">
+            <Link to="/admin/review" className="flex items-center justify-between p-4 rounded-lg border border-slate-200 hover:border-brand-300 hover:bg-brand-50/50 transition-all group">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center">
                   <FileCheck className="w-4 h-4 text-amber-600" />
@@ -147,7 +147,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-slate-400">{stats.pending} awaiting approval</p>
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+              <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-brand-600 transition-colors" />
             </Link>
           </div>
         </div>

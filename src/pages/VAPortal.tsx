@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Shield, BookOpen, Search, Building2, FileText, ChevronRight, Loader2, Info, X } from 'lucide-react';
+import { Shield, Search, Building2, FileText, ChevronRight, Loader2, Info, X } from 'lucide-react';
 import { supabase, type InsuranceCompany, type SearchResult } from '@/lib/supabase';
+import { LavaLogo } from '@/components/LavaLogo';
 
 export default function VAPortal() {
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
@@ -47,9 +48,7 @@ export default function VAPortal() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-white" />
-            </div>
+            <LavaLogo className="w-10 h-10 rounded-xl" />
             <div>
               <h1 className="text-base font-bold text-slate-900">Insurance SOP Search Portal</h1>
               <p className="text-xs text-slate-400">LAVA Automation</p>
@@ -65,8 +64,8 @@ export default function VAPortal() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Building2 className="w-4.5 h-4.5 text-blue-600" />
+            <div className="w-9 h-9 bg-brand-50 rounded-lg flex items-center justify-center">
+              <Building2 className="w-4.5 h-4.5 text-brand-600" />
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-900">Select Insurance Company</label>
@@ -77,7 +76,7 @@ export default function VAPortal() {
             value={selectedCompany}
             onChange={(e) => { setSelectedCompany(e.target.value); setHasSearched(false); setResults([]); }}
             disabled={loading}
-            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
+            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
           >
             <option value="">{loading ? 'Loading...' : 'Select an insurance company...'}</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -103,13 +102,13 @@ export default function VAPortal() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="e.g. Cancellation, Claims, Underwriting..."
-                  className="w-full pl-9 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  className="w-full pl-9 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
                 />
               </div>
               <button
                 type="submit"
                 disabled={searching || !searchQuery.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
               >
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 Search
@@ -120,7 +119,7 @@ export default function VAPortal() {
 
         {searching && (
           <div className="text-center py-12">
-            <Loader2 className="w-6 h-6 text-blue-500 animate-spin mx-auto mb-3" />
+            <Loader2 className="w-6 h-6 text-brand-500 animate-spin mx-auto mb-3" />
             <p className="text-sm text-slate-400">Searching approved SOPs...</p>
           </div>
         )}
@@ -146,12 +145,12 @@ export default function VAPortal() {
                 <button
                   key={result.document_id}
                   onClick={() => setSelectedResult(result)}
-                  className="w-full text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-blue-300 transition-all group"
+                  className="w-full text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-brand-300 transition-all group"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-blue-600" />
+                      <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-brand-600" />
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{result.title}</p>
@@ -164,7 +163,7 @@ export default function VAPortal() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-blue-600 text-sm font-medium">
+                    <div className="flex items-center gap-2 text-brand-600 text-sm font-medium">
                       View SOP
                       <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                     </div>
@@ -176,11 +175,11 @@ export default function VAPortal() {
         )}
 
         {!searching && !hasSearched && selectedCompany && (
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-5 flex items-start gap-3">
+            <Info className="w-5 h-5 text-brand-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm text-blue-900 font-medium">Ready to search</p>
-              <p className="text-xs text-blue-700 mt-1">
+              <p className="text-sm text-brand-900 font-medium">Ready to search</p>
+              <p className="text-xs text-brand-700 mt-1">
                 Enter a process or workflow term above to search within the approved SOP documents for {companies.find((c) => c.id === selectedCompany)?.name}.
                 Only published SOPs are included in search results.
               </p>

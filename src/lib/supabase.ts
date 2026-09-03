@@ -3,7 +3,25 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+/**
+ * True only when both env vars are actually present. Checked by main.tsx
+ * before it even tries to render the app, so a missing-config deploy shows a
+ * clear message instead of a blank white screen.
+ *
+ * Deliberately does NOT throw here: a throw at module-evaluation time runs
+ * before React starts, so no error boundary could ever catch it.
+ */
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+if (!isSupabaseConfigured) {
+  console.error(
+    'Missing VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY. ' +
+      'Set them for this environment (locally: .env; on Vercel: Settings → ' +
+      'Environment Variables) and redeploy/restart.'
+  );
+}
+
+export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder-anon-key', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

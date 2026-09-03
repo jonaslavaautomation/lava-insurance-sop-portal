@@ -124,7 +124,7 @@ export default function AdminUpload() {
           <select
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
           >
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -137,7 +137,7 @@ export default function AdminUpload() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Cancellation Process SOP"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
           />
         </div>
 
@@ -147,7 +147,7 @@ export default function AdminUpload() {
             <select
               value={lineOfBusiness}
               onChange={(e) => setLineOfBusiness(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
             >
               <option>Personal Lines</option>
               <option>Commercial Lines</option>
@@ -162,7 +162,7 @@ export default function AdminUpload() {
               value={processCategory}
               onChange={(e) => setProcessCategory(e.target.value)}
               placeholder="e.g. Cancellation"
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
             />
           </div>
           <div>
@@ -172,7 +172,7 @@ export default function AdminUpload() {
               value={version}
               onChange={(e) => setVersion(e.target.value)}
               placeholder="1.0"
-              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
             />
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function AdminUpload() {
           <label className="block text-sm font-medium text-slate-700 mb-1.5">SOP Content</label>
           <div className="space-y-3">
             <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/50 transition-all w-full">
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-slate-300 hover:border-brand-400 hover:bg-brand-50/50 transition-all w-full">
                 <Upload className="w-4 h-4 text-slate-400" />
                 <span className="text-sm">{fileName || 'Upload a text file (.txt, .md)'}</span>
                 <input type="file" accept=".txt,.md,.text" onChange={handleFile} className="hidden" />
@@ -193,7 +193,7 @@ export default function AdminUpload() {
               onChange={(e) => { setContent(e.target.value); setFileName(''); }}
               rows={12}
               placeholder="Paste the full SOP document text here..."
-              className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono resize-y"
+              className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
             />
           </div>
         </div>
@@ -202,7 +202,7 @@ export default function AdminUpload() {
           <button
             type="submit"
             disabled={submitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+            className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             Upload SOP

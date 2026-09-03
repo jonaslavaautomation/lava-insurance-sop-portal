@@ -62,7 +62,7 @@ export default function AdminReviewList() {
                 </div>
                 <Link
                   to={`/admin/review/${doc.id}`}
-                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                  className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-700 font-medium px-4 py-2 rounded-lg hover:bg-brand-50 transition-colors"
                 >
                   <Eye className="w-4 h-4" /> Review <ArrowRight className="w-3.5 h-3.5" />
                 </Link>

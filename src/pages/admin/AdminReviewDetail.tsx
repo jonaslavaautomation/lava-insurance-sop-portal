@@ -91,7 +91,7 @@ export default function AdminReviewDetail() {
     return (
       <div className="p-8">
         <p className="text-slate-500 text-sm">SOP document not found.</p>
-        <Link to="/admin/review" className="text-blue-600 text-sm mt-2 inline-block">Back to Pending Reviews</Link>
+        <Link to="/admin/review" className="text-brand-600 text-sm mt-2 inline-block">Back to Pending Reviews</Link>
       </div>
     );
   }
@@ -173,7 +173,7 @@ export default function AdminReviewDetail() {
           value={editableContent}
           onChange={(e) => setEditableContent(e.target.value)}
           rows={16}
-          className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono resize-y"
+          className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
         />
       </div>
 
