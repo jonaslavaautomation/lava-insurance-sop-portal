@@ -26,7 +26,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<RootRedirect />} />
 
-          <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+          <Route path="/admin" element={<ProtectedRoute adminOnly><AdminLayout /></ProtectedRoute>}>
             <Route index element={<AdminDashboard />} />
             <Route path="companies" element={<AdminCompanies />} />
             <Route path="library" element={<AdminLibrary />} />
@@ -35,7 +35,7 @@ export default function App() {
             <Route path="review/:id" element={<AdminReviewDetail />} />
           </Route>
 
-          <Route path="/portal" element={<VAPortal />} />
+          <Route path="/portal" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -2,7 +2,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import type { ReactNode } from 'react';
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
+interface Props {
+  children: ReactNode;
+  /** Require role === 'admin', not just any signed-in session. */
+  adminOnly?: boolean;
+}
+
+export function ProtectedRoute({ children, adminOnly = false }: Props) {
   const { session, profile, loading } = useAuth();
 
   if (loading) {
@@ -17,11 +23,11 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Signing in (Google/SSO included) only proves who someone is, not that
+  // Signing in (Google included) only proves who someone is, not that
   // they're an admin — new accounts default to va_student. Anyone who is
-  // authenticated but not an admin gets sent to the public VA portal instead
-  // of the admin dashboard.
-  if (profile && profile.role !== 'admin') {
+  // authenticated but not an admin gets sent to the VA portal instead of
+  // the admin dashboard.
+  if (adminOnly && profile && profile.role !== 'admin') {
     return <Navigate to="/portal" replace />;
   }
 

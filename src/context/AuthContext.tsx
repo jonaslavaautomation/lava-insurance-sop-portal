@@ -61,21 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signUp(email: string, password: string, fullName: string) {
-    const { data, error } = await supabase.auth.signUp({
+    // Role is decided entirely server-side (handle_new_user trigger, based on
+    // email) — this never grants admin itself. See supabase/sql-editor/
+    // 00_full_schema.sql for the single source of truth on who gets admin.
+    const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName, role: 'admin' } },
+      options: { data: { full_name: fullName } },
     });
-    if (error) return { error: error.message };
-
-    if (data.user) {
-      await supabase
-        .from('profiles')
-        .update({ role: 'admin', full_name: fullName })
-        .eq('id', data.user.id);
-    }
-
-    return { error: null };
+    return { error: error?.message ?? null };
   }
 
   async function signInWithGoogle() {

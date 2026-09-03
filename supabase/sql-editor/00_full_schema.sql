@@ -62,7 +62,10 @@ CREATE POLICY "profiles_insert_admin" ON profiles
   FOR INSERT TO authenticated
   WITH CHECK (is_admin());
 
--- Trigger: auto-create profile on signup
+-- Trigger: auto-create profile on signup.
+-- jonas@lavaautomation.com is the only email auto-promoted to admin;
+-- everyone else (Google/Gmail sign-ins included) starts as va_student and
+-- must be promoted manually (see promote_to_admin.sql).
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -70,8 +73,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO profiles (id, email, full_name)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', ''));
+  INSERT INTO profiles (id, email, full_name, role)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+    CASE WHEN lower(NEW.email) = 'jonas@lavaautomation.com' THEN 'admin' ELSE 'va_student' END
+  );
   RETURN NEW;
 END;
 $$;
@@ -282,42 +290,19 @@ AS $$
 $$;
 
 -- ============================================================
--- ANON (PUBLIC VA/STUDENT PORTAL) READ ACCESS
+-- VA/STUDENT PORTAL ACCESS
 -- ============================================================
--- The VA/Student portal at /portal is public — accessed without logging in.
--- These policies grant the anon role SELECT access to published SOP data only.
--- Admin-only operations (insert/update/delete) remain restricted to
--- authenticated admins via is_admin() above.
-
--- insurance_companies: anon can read all companies
+-- The VA/Student portal at /portal requires signing in (any Google/Gmail
+-- account). Signed-in non-admins already get read access to published SOP
+-- data via the authenticated-role policies above (sop_docs_select,
+-- sop_content_select, sop_versions_select, companies_select_all) — no
+-- separate anon policy is needed, and none is granted. If you're migrating
+-- an older deployment that still has the anon policies from an earlier
+-- "public portal" version, drop them:
 DROP POLICY IF EXISTS "companies_select_anon" ON insurance_companies;
-CREATE POLICY "companies_select_anon" ON insurance_companies
-  FOR SELECT TO anon
-  USING (true);
-
--- sop_documents: anon can read published only
 DROP POLICY IF EXISTS "sop_docs_select_anon" ON sop_documents;
-CREATE POLICY "sop_docs_select_anon" ON sop_documents
-  FOR SELECT TO anon
-  USING (status = 'published');
-
--- sop_content: anon can read content of published docs only
 DROP POLICY IF EXISTS "sop_content_select_anon" ON sop_content;
-CREATE POLICY "sop_content_select_anon" ON sop_content
-  FOR SELECT TO anon
-  USING (
-    EXISTS (
-      SELECT 1 FROM sop_documents
-      WHERE sop_documents.id = sop_content.sop_document_id
-      AND sop_documents.status = 'published'
-    )
-  );
-
--- sop_versions: anon can read published versions only
 DROP POLICY IF EXISTS "sop_versions_select_anon" ON sop_versions;
-CREATE POLICY "sop_versions_select_anon" ON sop_versions
-  FOR SELECT TO anon
-  USING (status = 'published');
 
 -- ============================================================
 -- Force PostgREST to pick up the schema immediately.

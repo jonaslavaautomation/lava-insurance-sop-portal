@@ -59,7 +59,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <LavaLogo className="w-16 h-16 rounded-2xl mb-4 mx-auto shadow-lg shadow-black/20" />
           <h1 className="text-2xl font-bold text-slate-900">LAVA Automation</h1>
-          <p className="text-slate-500 mt-1">Insurance SOP Search Portal — Admin</p>
+          <p className="text-slate-500 mt-1">Insurance SOP Search Portal</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
@@ -151,13 +151,13 @@ export default function Login() {
               className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === 'login' ? 'Sign In' : 'Create Admin Account'}
+              {mode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
           </form>
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-6">
-          Admin access only. VA / Student portal is available at /portal
+          VAs and students: sign in with your Google account to search approved SOPs.
         </p>
       </div>
     </div>

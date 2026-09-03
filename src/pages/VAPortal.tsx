@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Shield, Search, Building2, FileText, ChevronRight, Loader2, Info, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Building2, FileText, ChevronRight, Loader2, Info, X, LogOut } from 'lucide-react';
 import { supabase, type InsuranceCompany, type SearchResult } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
+import { useAuth } from '@/context/AuthContext';
 
 export default function VAPortal() {
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,6 +47,11 @@ export default function VAPortal() {
     setSearching(false);
   }
 
+  async function handleSignOut() {
+    await signOut();
+    navigate('/login');
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
@@ -54,9 +63,18 @@ export default function VAPortal() {
               <p className="text-xs text-slate-400">LAVA Automation</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Shield className="w-3.5 h-3.5" />
-            VA / Student Portal
+          <div className="flex items-center gap-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-medium text-slate-600 truncate max-w-[180px]">{profile?.email}</p>
+              <p className="text-[11px] text-slate-400">VA / Student Portal</p>
+            </div>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign Out
+            </button>
           </div>
         </div>
       </header>
