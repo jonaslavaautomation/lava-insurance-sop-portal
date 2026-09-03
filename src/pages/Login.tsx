@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { LavaLogo } from '@/components/LavaLogo';
+import { GoogleIcon } from '@/components/GoogleIcon';
 
 export default function Login() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -14,6 +15,19 @@ export default function Login() {
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setGoogleLoading(true);
+    const { error } = await signInWithGoogle();
+    // Only reachable if the redirect to Google itself failed — a successful
+    // call navigates the browser away before this line would matter.
+    if (error) {
+      setError(error);
+      setGoogleLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +63,22 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={googleLoading || loading}
+            className="w-full flex items-center justify-center gap-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mb-6"
+          >
+            {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon className="w-4 h-4" />}
+            Continue with Google
+          </button>
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-xs text-slate-400">or</span>
+            <div className="flex-1 h-px bg-slate-200" />
+          </div>
+
           <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-xl">
             <button
               onClick={() => { setMode('login'); setError(null); }}

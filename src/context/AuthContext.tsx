@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -77,13 +78,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }
 
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/admin` },
+    });
+    // On success the browser navigates away to Google's consent screen, so
+    // there's nothing further to do here. `error` is only ever set when the
+    // redirect itself couldn't be initiated (e.g. provider not configured).
+    return { error: error?.message ?? null };
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     setProfile(null);
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
