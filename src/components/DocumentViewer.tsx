@@ -1,50 +1,30 @@
 import type { SopImage } from '@/lib/supabase';
-
-interface Block {
-  heading: boolean;
-  text: string;
-}
+import { splitIntoSteps } from '@/lib/splitIntoSteps';
 
 /**
- * Splits plain-text SOP content into paragraph/heading blocks so it reads
- * consistently no matter what it was uploaded as (PDF, Word, or pasted
- * text all end up as plain text — see lib/extractDocument.ts). A short,
- * single-line paragraph with no closing punctuation is treated as a
- * heading (e.g. "Cancellation Requirements"); everything else is a normal
- * paragraph, with single line breaks inside it preserved.
+ * Renders plain-text SOP content as a numbered 1, 2, 3... list, same visual
+ * language as a Tango-style step import (see StepsViewer) — so every SOP
+ * reads the same way regardless of what format it started as or how it was
+ * written (numbered list, bullet points, or plain paragraphs all end up
+ * numbered here). See lib/splitIntoSteps.ts for how items are recognized.
  */
-function parseBlocks(content: string): Block[] {
-  return content
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((text) => {
-      const singleLine = !text.includes('\n');
-      const heading = singleLine && text.length <= 80 && !/[.,;:?!]$/.test(text);
-      return { heading, text };
-    });
-}
-
 export function DocumentViewer({ content, images }: { content: string; images?: SopImage[] | null }) {
-  const blocks = parseBlocks(content);
+  const items = splitIntoSteps(content) ?? [];
 
-  if (blocks.length === 0 && (!images || images.length === 0)) {
+  if (items.length === 0 && (!images || images.length === 0)) {
     return <p className="text-sm text-slate-400">No content.</p>;
   }
 
   return (
     <div className="space-y-4">
-      {blocks.map((block, i) =>
-        block.heading ? (
-          <h3 key={i} className="text-sm font-bold text-slate-900 pt-1">
-            {block.text}
-          </h3>
-        ) : (
-          <p key={i} className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-            {block.text}
-          </p>
-        )
-      )}
+      {items.map((text, i) => (
+        <div key={i} className="flex gap-3">
+          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+            {i + 1}
+          </div>
+          <p className="flex-1 text-sm text-slate-700 leading-relaxed whitespace-pre-line pt-0.5">{text}</p>
+        </div>
+      ))}
 
       {images && images.length > 0 && (
         <div className="pt-2 space-y-3">

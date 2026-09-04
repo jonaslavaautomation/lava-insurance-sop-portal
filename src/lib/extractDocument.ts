@@ -1,4 +1,5 @@
 import type { SopStep } from '@/lib/supabase';
+import { splitIntoListItems } from '@/lib/splitIntoSteps';
 
 export interface ExtractedImage {
   dataUrl: string;
@@ -42,52 +43,21 @@ export async function extractTextFromFile(file: File): Promise<ExtractedDocument
   return result;
 }
 
-const STEP_START_RE = /^\d{1,3}[:.]\s/;
-const STEP_MARKER_RE = /(?:^|\s)(\d{1,3})[:.]\s/g;
-const STEP_SPLIT_RE = /(?=(?:^|\s)\d{1,3}[:.]\s)/;
-const STEP_PREFIX_RE = /^\d{1,3}[:.]\s*/;
-
 /**
- * Recognizes a document that's really a numbered step-by-step walkthrough
- * (the shape Tango exports as a PDF/Word doc: "1: Do this", "2: Do that",
- * each usually followed by its own screenshot) rather than an ordinary
- * prose document. When it matches, folds text + images into the same
- * per-step shape used for a direct Tango import, so it renders with the
- * same numbered-walkthrough viewer instead of being squeezed into
- * paragraphs (where a run of short numbered lines reads badly — lines can
- * merge together or get misread as headings).
- *
- * Scans the whole text for "N: "/"N. " markers rather than checking where
- * paragraph breaks happen to fall — PDF layout reconstruction sometimes
- * collapses an entire page (heading included) into one block with no
- * blank-line breaks at all, which would hide step markers from a check
- * that only looked at the start of each already-split paragraph.
+ * Recognizes a document that's really a step-by-step walkthrough — numbered
+ * markers ("1: Do this") or bullet points ("• Do this"), each usually
+ * followed by its own screenshot — rather than an ordinary prose document.
+ * When it matches, folds text + images into the same per-step shape used
+ * for a direct Tango import (one image per item, in order), so it renders
+ * with the numbered-walkthrough viewer instead of being squeezed into
+ * paragraphs. Plain prose with no list structure is left as-is here — it
+ * still gets numbered for display, just at render time (see
+ * DocumentViewer), since there's no reliable way to say which image goes
+ * with which paragraph without an explicit list to anchor on.
  */
 function detectNumberedSteps(text: string, images: ExtractedImage[]): SopStep[] | null {
-  const markerNumbers = [...text.matchAll(STEP_MARKER_RE)].map((m) => parseInt(m[1], 10));
-  if (markerNumbers.length < 3) return null;
-
-  // Guard against incidental matches (a time like "3:00", a lone "Section
-  // 2.") by requiring the markers to actually count up 1, 2, 3, ... —
-  // real steps do; stray numbers followed by a colon/period don't.
-  if (markerNumbers[0] > 2) return null;
-  let ascendingRun = 1;
-  for (let i = 1; i < markerNumbers.length; i++) {
-    if (markerNumbers[i] === markerNumbers[i - 1] + 1) ascendingRun++;
-    else break;
-  }
-  if (ascendingRun < 3) return null;
-
-  const titles = text
-    .split(STEP_SPLIT_RE)
-    .map((part) => part.trim())
-    // Drops any preamble before the first "1:" (e.g. a document title/
-    // heading that got merged into the same block as the steps).
-    .filter((part) => STEP_START_RE.test(part))
-    .map((part) => part.replace(STEP_PREFIX_RE, '').trim())
-    .filter(Boolean);
-
-  if (titles.length < 3) return null;
+  const titles = splitIntoListItems(text);
+  if (!titles || titles.length < 3) return null;
 
   return titles.map((title, i) => ({
     stepIndex: i,
