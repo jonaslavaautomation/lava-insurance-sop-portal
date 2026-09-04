@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase, type InsuranceCompany } from '@/lib/supabase';
+import { extractTextFromFile } from '@/lib/extractDocument';
 
 export default function AdminUpload() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export default function AdminUpload() {
   const [version, setVersion] = useState('1.0');
   const [content, setContent] = useState('');
   const [fileName, setFileName] = useState('');
+  const [parsing, setParsing] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -29,16 +31,25 @@ export default function AdminUpload() {
     load();
   }, []);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError(null);
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
+    setParsing(true);
+    try {
+      // Whatever format this came in as, it ends up as the same kind of
+      // plain text — so every SOP renders the same way in the VA portal
+      // regardless of whether it started as a PDF, a Word doc, or pasted
+      // text.
+      const text = await extractTextFromFile(file);
       setContent(text);
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that file.');
+      setFileName('');
+    } finally {
+      setParsing(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -104,7 +115,10 @@ export default function AdminUpload() {
   return (
     <div className="p-8 max-w-3xl">
       <h1 className="text-2xl font-bold text-slate-900 mb-1">Upload SOP Document</h1>
-      <p className="text-slate-500 text-sm mb-6">Upload a new SOP for review. The content will be extracted and stored as the source of truth.</p>
+      <p className="text-slate-500 text-sm mb-6">
+        Upload a PDF, Word document, or plain text file — the text is extracted automatically and
+        normalized to the same format VAs see for every SOP, no matter what it was uploaded as.
+      </p>
 
       {success && (
         <div className="mb-6 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
@@ -182,9 +196,17 @@ export default function AdminUpload() {
           <div className="space-y-3">
             <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
               <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-slate-300 hover:border-brand-400 hover:bg-brand-50/50 transition-all w-full">
-                <Upload className="w-4 h-4 text-slate-400" />
-                <span className="text-sm">{fileName || 'Upload a text file (.txt, .md)'}</span>
-                <input type="file" accept=".txt,.md,.text" onChange={handleFile} className="hidden" />
+                {parsing ? <Loader2 className="w-4 h-4 text-slate-400 animate-spin" /> : <Upload className="w-4 h-4 text-slate-400" />}
+                <span className="text-sm">
+                  {parsing ? 'Reading file…' : fileName || 'Upload a PDF, Word (.docx), or text file'}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md,.text"
+                  onChange={handleFile}
+                  disabled={parsing}
+                  className="hidden"
+                />
               </div>
             </label>
             <p className="text-xs text-slate-400 text-center">or paste the SOP content below</p>
@@ -201,7 +223,7 @@ export default function AdminUpload() {
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || parsing}
             className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
