@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, AlertCircle, CheckCircle, ImageIcon } from 'lucide-react';
-import { supabase, type InsuranceCompany } from '@/lib/supabase';
+import { Upload, FileText, Loader2, AlertCircle, CheckCircle, ImageIcon, ListOrdered } from 'lucide-react';
+import { supabase, type InsuranceCompany, type SopStep } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
+import { StepsViewer } from '@/components/StepsViewer';
 
 export default function AdminUpload() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function AdminUpload() {
   const [fileName, setFileName] = useState('');
   const [parsing, setParsing] = useState(false);
   const [images, setImages] = useState<ExtractedImage[]>([]);
+  const [steps, setSteps] = useState<SopStep[] | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -43,13 +45,15 @@ export default function AdminUpload() {
       // plain text (plus any embedded photos) — so every SOP renders the
       // same way in the VA portal regardless of whether it started as a
       // PDF, a Word doc, or pasted text.
-      const { text, images: extractedImages } = await extractTextFromFile(file);
+      const { text, images: extractedImages, steps: extractedSteps } = await extractTextFromFile(file);
       setContent(text);
       setImages(extractedImages);
+      setSteps(extractedSteps ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.');
       setFileName('');
       setImages([]);
+      setSteps(null);
     } finally {
       setParsing(false);
     }
@@ -85,11 +89,20 @@ export default function AdminUpload() {
       return;
     }
 
-    const { error: contentError } = await supabase.from('sop_content').insert({
-      sop_document_id: doc.id,
-      content: content.trim(),
-      images: images.length > 0 ? images : null,
-    });
+    const { error: contentError } = await supabase.from('sop_content').insert(
+      steps && steps.length > 0
+        ? {
+            sop_document_id: doc.id,
+            content: content.trim(),
+            content_type: 'steps',
+            steps,
+          }
+        : {
+            sop_document_id: doc.id,
+            content: content.trim(),
+            images: images.length > 0 ? images : null,
+          }
+    );
 
     if (contentError) {
       setError(contentError.message);
@@ -213,20 +226,46 @@ export default function AdminUpload() {
                 />
               </div>
             </label>
-            {images.length > 0 && (
+            {steps && steps.length > 0 ? (
               <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                <ImageIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                Found {images.length} image{images.length !== 1 ? 's' : ''} in this file — they'll be attached to this SOP.
+                <ListOrdered className="w-3.5 h-3.5 flex-shrink-0" />
+                This looks like a {steps.length}-step walkthrough — it'll display as a numbered guide with a screenshot per step, same as the file's own layout.
               </div>
+            ) : (
+              images.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <ImageIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                  Found {images.length} image{images.length !== 1 ? 's' : ''} in this file — they'll be attached to this SOP.
+                </div>
+              )
             )}
-            <p className="text-xs text-slate-400 text-center">or paste the SOP content below</p>
-            <textarea
-              value={content}
-              onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); }}
-              rows={12}
-              placeholder="Paste the full SOP document text here..."
-              className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
-            />
+
+            {steps && steps.length > 0 ? (
+              <div>
+                <div className="border border-slate-200 rounded-lg p-4 max-h-96 overflow-y-auto bg-slate-50">
+                  <p className="text-xs font-medium text-slate-500 mb-3">Preview</p>
+                  <StepsViewer steps={steps} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSteps(null); setImages([]); setFileName(''); setContent(''); }}
+                  className="text-xs text-slate-400 hover:text-slate-600 mt-2"
+                >
+                  Not right? Clear and paste text instead
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-slate-400 text-center">or paste the SOP content below</p>
+                <textarea
+                  value={content}
+                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); }}
+                  rows={12}
+                  placeholder="Paste the full SOP document text here..."
+                  className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
+                />
+              </>
+            )}
           </div>
         </div>
 
