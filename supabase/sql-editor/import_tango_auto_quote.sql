@@ -5,11 +5,57 @@
   step-by-step walkthrough. It shows up in Admin -> Pending Reviews for
   approval before it's visible in the VA portal.
 
-  Requires the step-by-step content migration to already be applied first
-  (00_full_schema.sql, or supabase/migrations/
-  20260904120000_add_step_by_step_sop_content.sql) - run that first if
-  sop_content.content_type doesn't exist yet.
+  Self-contained: adds the step-by-step content columns/function itself
+  first (safe to re-run - IF NOT EXISTS / CREATE OR REPLACE throughout),
+  so this works standalone even if 00_full_schema.sql was never run.
 */
+
+ALTER TABLE sop_content
+  ADD COLUMN IF NOT EXISTS content_type text NOT NULL DEFAULT 'text' CHECK (content_type IN ('text', 'steps')),
+  ADD COLUMN IF NOT EXISTS steps jsonb;
+
+CREATE OR REPLACE FUNCTION search_sops(
+  p_company_id uuid,
+  p_query text
+)
+RETURNS TABLE (
+  document_id uuid,
+  title text,
+  line_of_business text,
+  process_category text,
+  version text,
+  content text,
+  content_type text,
+  steps jsonb,
+  insurance_company_name text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    d.id,
+    d.title,
+    d.line_of_business,
+    d.process_category,
+    d.version,
+    c.content,
+    c.content_type,
+    c.steps,
+    ic.name
+  FROM sop_documents d
+  JOIN sop_content c ON c.sop_document_id = d.id
+  JOIN insurance_companies ic ON ic.id = d.insurance_company_id
+  WHERE d.insurance_company_id = p_company_id
+    AND d.status = 'published'
+    AND (
+      d.title ILIKE '%' || p_query || '%'
+      OR d.process_category ILIKE '%' || p_query || '%'
+      OR d.line_of_business ILIKE '%' || p_query || '%'
+      OR c.content ILIKE '%' || p_query || '%'
+    )
+  ORDER BY d.title;
+$$;
 
 INSERT INTO insurance_companies (name) VALUES ('Progressive')
 ON CONFLICT (name) DO NOTHING;
