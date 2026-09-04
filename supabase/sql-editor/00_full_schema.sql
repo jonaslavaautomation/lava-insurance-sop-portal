@@ -172,6 +172,12 @@ CREATE TABLE IF NOT EXISTS sop_content (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sop_document_id uuid NOT NULL REFERENCES sop_documents(id) ON DELETE CASCADE,
   content text NOT NULL,
+  -- 'steps' rows render as a numbered walkthrough with a screenshot per
+  -- step (e.g. imported from Tango) instead of a plain text block. `content`
+  -- is still populated (a flattened version of the steps) so search keeps
+  -- working either way. See `steps` shape in the migration file.
+  content_type text NOT NULL DEFAULT 'text' CHECK (content_type IN ('text', 'steps')),
+  steps jsonb,
   created_at timestamptz DEFAULT now()
 );
 
@@ -261,6 +267,8 @@ RETURNS TABLE (
   process_category text,
   version text,
   content text,
+  content_type text,
+  steps jsonb,
   insurance_company_name text
 )
 LANGUAGE sql
@@ -274,6 +282,8 @@ AS $$
     d.process_category,
     d.version,
     c.content,
+    c.content_type,
+    c.steps,
     ic.name
   FROM sop_documents d
   JOIN sop_content c ON c.sop_document_id = d.id

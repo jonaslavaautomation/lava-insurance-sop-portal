@@ -58,10 +58,24 @@ export interface SopDocument {
   updated_at: string;
 }
 
+export type SopContentType = 'text' | 'steps';
+
+/** One step of a walkthrough (e.g. imported from a Tango recording). */
+export interface SopStep {
+  stepIndex: number;
+  title: string;
+  /** May contain simple HTML (e.g. a wrapping <p>); rendered as plain text. */
+  description: string;
+  imageUrl: string | null;
+  sourceUrl: string | null;
+}
+
 export interface SopContent {
   id: string;
   sop_document_id: string;
   content: string;
+  content_type: SopContentType;
+  steps: SopStep[] | null;
   created_at: string;
 }
 
@@ -84,5 +98,7 @@ export interface SearchResult {
   process_category: string;
   version: string;
   content: string;
+  content_type: SopContentType;
+  steps: SopStep[] | null;
   insurance_company_name: string;
 }

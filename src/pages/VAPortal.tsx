@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Building2, FileText, ChevronRight, Loader2, Info, X, LogOut } from 'lucide-react';
 import { supabase, type InsuranceCompany, type SearchResult } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
+import { StepsViewer } from '@/components/StepsViewer';
 import { useAuth } from '@/context/AuthContext';
 
 export default function VAPortal() {
@@ -236,7 +237,11 @@ export default function VAPortal() {
               </button>
             </div>
             <div className="px-6 py-5 overflow-y-auto">
-              <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">{selectedResult.content}</pre>
+              {selectedResult.content_type === 'steps' && selectedResult.steps ? (
+                <StepsViewer steps={selectedResult.steps} />
+              ) : (
+                <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">{selectedResult.content}</pre>
+              )}
             </div>
           </div>
         </div>

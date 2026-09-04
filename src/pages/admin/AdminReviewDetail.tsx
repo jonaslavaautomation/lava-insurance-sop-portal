@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, AlertCircle, FileText, History } from 'lucide-react';
 import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany } from '@/lib/supabase';
+import { StepsViewer } from '@/components/StepsViewer';
 
 export default function AdminReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -46,8 +47,9 @@ export default function AdminReviewDetail() {
     setActionLoading(true);
     setError(null);
 
-    // Save edited content
-    if (editableContent !== content?.content) {
+    // Save edited content (steps-based SOPs are read-only here for now —
+    // there's no per-step editor yet, so never overwrite their steps json).
+    if (content?.content_type !== 'steps' && editableContent !== content?.content) {
       await supabase.from('sop_content').update({ content: editableContent }).eq('sop_document_id', id);
     }
 
@@ -167,14 +169,20 @@ export default function AdminReviewDetail() {
           <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
             <FileText className="w-4 h-4 text-slate-400" /> SOP Content
           </h2>
-          <span className="text-xs text-slate-400">Review and edit before publishing</span>
+          <span className="text-xs text-slate-400">
+            {content?.content_type === 'steps' ? 'Step-by-step walkthrough (read-only preview)' : 'Review and edit before publishing'}
+          </span>
         </div>
-        <textarea
-          value={editableContent}
-          onChange={(e) => setEditableContent(e.target.value)}
-          rows={16}
-          className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
-        />
+        {content?.content_type === 'steps' && content.steps ? (
+          <StepsViewer steps={content.steps} />
+        ) : (
+          <textarea
+            value={editableContent}
+            onChange={(e) => setEditableContent(e.target.value)}
+            rows={16}
+            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
+          />
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
