@@ -241,7 +241,7 @@ export default function VAPortal() {
               {selectedResult.content_type === 'steps' && selectedResult.steps ? (
                 <StepsViewer steps={selectedResult.steps} />
               ) : (
-                <DocumentViewer content={selectedResult.content} />
+                <DocumentViewer content={selectedResult.content} images={selectedResult.images} />
               )}
             </div>
           </div>

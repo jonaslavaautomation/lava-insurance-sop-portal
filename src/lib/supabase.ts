@@ -70,12 +70,19 @@ export interface SopStep {
   sourceUrl: string | null;
 }
 
+/** A photo/screenshot found inside an uploaded PDF or Word document. */
+export interface SopImage {
+  dataUrl: string;
+  page?: number;
+}
+
 export interface SopContent {
   id: string;
   sop_document_id: string;
   content: string;
   content_type: SopContentType;
   steps: SopStep[] | null;
+  images: SopImage[] | null;
   created_at: string;
 }
 
@@ -100,5 +107,6 @@ export interface SearchResult {
   content: string;
   content_type: SopContentType;
   steps: SopStep[] | null;
+  images: SopImage[] | null;
   insurance_company_name: string;
 }

@@ -178,6 +178,9 @@ CREATE TABLE IF NOT EXISTS sop_content (
   -- working either way. See `steps` shape in the migration file.
   content_type text NOT NULL DEFAULT 'text' CHECK (content_type IN ('text', 'steps')),
   steps jsonb,
+  -- Images embedded in the original PDF/Word upload, extracted at upload
+  -- time. Shape: [{ dataUrl: string, page?: number }, ...] in document order.
+  images jsonb,
   created_at timestamptz DEFAULT now()
 );
 
@@ -269,6 +272,7 @@ RETURNS TABLE (
   content text,
   content_type text,
   steps jsonb,
+  images jsonb,
   insurance_company_name text
 )
 LANGUAGE sql
@@ -284,6 +288,7 @@ AS $$
     c.content,
     c.content_type,
     c.steps,
+    c.images,
     ic.name
   FROM sop_documents d
   JOIN sop_content c ON c.sop_document_id = d.id

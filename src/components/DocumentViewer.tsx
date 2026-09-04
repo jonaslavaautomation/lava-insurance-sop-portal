@@ -1,3 +1,5 @@
+import type { SopImage } from '@/lib/supabase';
+
 interface Block {
   heading: boolean;
   text: string;
@@ -23,10 +25,10 @@ function parseBlocks(content: string): Block[] {
     });
 }
 
-export function DocumentViewer({ content }: { content: string }) {
+export function DocumentViewer({ content, images }: { content: string; images?: SopImage[] | null }) {
   const blocks = parseBlocks(content);
 
-  if (blocks.length === 0) {
+  if (blocks.length === 0 && (!images || images.length === 0)) {
     return <p className="text-sm text-slate-400">No content.</p>;
   }
 
@@ -42,6 +44,20 @@ export function DocumentViewer({ content }: { content: string }) {
             {block.text}
           </p>
         )
+      )}
+
+      {images && images.length > 0 && (
+        <div className="pt-2 space-y-3">
+          {images.map((img, i) => (
+            <img
+              key={i}
+              src={img.dataUrl}
+              alt={img.page ? `Page ${img.page} image` : 'Document image'}
+              loading="lazy"
+              className="w-full rounded-lg border border-slate-200"
+            />
+          ))}
+        </div>
       )}
     </div>
   );

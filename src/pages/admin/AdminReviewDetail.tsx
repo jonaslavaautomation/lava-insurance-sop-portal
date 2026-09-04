@@ -176,12 +176,29 @@ export default function AdminReviewDetail() {
         {content?.content_type === 'steps' && content.steps ? (
           <StepsViewer steps={content.steps} />
         ) : (
-          <textarea
-            value={editableContent}
-            onChange={(e) => setEditableContent(e.target.value)}
-            rows={16}
-            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
-          />
+          <>
+            <textarea
+              value={editableContent}
+              onChange={(e) => setEditableContent(e.target.value)}
+              rows={16}
+              className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
+            />
+            {content?.images && content.images.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-medium text-slate-500">
+                  {content.images.length} image{content.images.length !== 1 ? 's' : ''} extracted from the upload
+                </p>
+                {content.images.map((img, i) => (
+                  <img
+                    key={i}
+                    src={img.dataUrl}
+                    alt={img.page ? `Page ${img.page} image` : 'Document image'}
+                    className="w-full rounded-lg border border-slate-200"
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

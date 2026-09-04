@@ -1,27 +1,37 @@
+export interface ExtractedImage {
+  dataUrl: string;
+  page?: number;
+}
+
+export interface ExtractedDocument {
+  text: string;
+  images: ExtractedImage[];
+}
+
 /**
- * Extracts plain text from an uploaded SOP file, whatever format it came
- * in — PDF, Word (.docx), or plain text/markdown. This is what lets SOPs
- * from any source end up looking the same once published: everything is
- * normalized to plain text before it's stored, and the VA portal renders
- * that text the same way regardless of where it came from.
+ * Extracts plain text (and any embedded photos) from an uploaded SOP file,
+ * whatever format it came in — PDF, Word (.docx), or plain text/markdown.
+ * This is what lets SOPs from any source end up looking the same once
+ * published: everything is normalized before it's stored, and the VA
+ * portal renders it the same way regardless of where it came from.
  */
-export async function extractTextFromFile(file: File): Promise<string> {
+export async function extractTextFromFile(file: File): Promise<ExtractedDocument> {
   const ext = file.name.split('.').pop()?.toLowerCase();
 
-  if (ext === 'pdf') return extractPdfText(file);
-  if (ext === 'docx') return extractDocxText(file);
+  if (ext === 'pdf') return extractPdf(file);
+  if (ext === 'docx') return extractDocx(file);
   if (ext === 'doc') {
     throw new Error(
       'Legacy .doc files aren’t supported — open it in Word and save as .docx, then upload that.'
     );
   }
-  // .txt, .md, and anything else: treat as plain text.
-  return file.text();
+  // .txt, .md, and anything else: treat as plain text, no images.
+  return { text: await file.text(), images: [] };
 }
 
-async function extractPdfText(file: File): Promise<string> {
-  // Dynamically imported: pdfjs-dist is large (~1MB+) and only VAs never
-  // need it — no reason to make every visitor download it up front.
+async function extractPdf(file: File): Promise<ExtractedDocument> {
+  // Dynamically imported: pdfjs-dist is large (~1MB+) and VAs never need
+  // it — no reason to make every visitor download it up front.
   const [pdfjsLib, { default: pdfjsWorkerUrl }] = await Promise.all([
     import('pdfjs-dist'),
     import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
@@ -32,13 +42,78 @@ async function extractPdfText(file: File): Promise<string> {
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
   const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
+  const images: ExtractedImage[] = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+
     const content = await page.getTextContent();
     const text = reconstructLayout(content.items);
     if (text) pages.push(text);
+
+    try {
+      const pageImages = await extractPdfPageImages(pdfjsLib, page, pageNum);
+      images.push(...pageImages);
+    } catch {
+      // A page's images failing to extract shouldn't block the rest of the
+      // document — the text for this SOP still comes through fine.
+    }
   }
-  return pages.join('\n\n');
+
+  return { text: pages.join('\n\n'), images };
+}
+
+async function extractPdfPageImages(
+  pdfjsLib: typeof import('pdfjs-dist'),
+  page: import('pdfjs-dist').PDFPageProxy,
+  pageNum: number
+): Promise<ExtractedImage[]> {
+  const opList = await page.getOperatorList();
+
+  const objIds: string[] = [];
+  for (let i = 0; i < opList.fnArray.length; i++) {
+    const fn = opList.fnArray[i];
+    if (fn === pdfjsLib.OPS.paintImageXObject) {
+      objIds.push(opList.argsArray[i][0]);
+    }
+  }
+  if (objIds.length === 0) return [];
+
+  // Rendering the page is what actually decodes images into page.objs —
+  // getOperatorList() alone only lists *that* images are painted, not
+  // their pixel data.
+  const viewport = page.getViewport({ scale: 1.5 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
+  await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+
+  const images: ExtractedImage[] = [];
+  for (const objId of objIds) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = (page.objs as any).get(objId);
+      const bitmap: ImageBitmap | undefined =
+        obj instanceof ImageBitmap ? obj : obj?.bitmap instanceof ImageBitmap ? obj.bitmap : undefined;
+      if (!bitmap) continue;
+      // Skip tiny images (icons, bullets, decorative rules) — not real photos.
+      if (bitmap.width < 40 || bitmap.height < 40) continue;
+
+      const out = document.createElement('canvas');
+      out.width = bitmap.width;
+      out.height = bitmap.height;
+      const outCtx = out.getContext('2d');
+      if (!outCtx) continue;
+      outCtx.drawImage(bitmap, 0, 0);
+      images.push({ dataUrl: out.toDataURL('image/png'), page: pageNum });
+    } catch {
+      // Some image ops reference masks/patterns rather than real photos —
+      // just skip whatever doesn't resolve to a plain bitmap.
+    }
+  }
+  return images;
 }
 
 interface PositionedTextItem {
@@ -108,9 +183,35 @@ function mode(values: number[]): number | null {
   return best;
 }
 
-async function extractDocxText(file: File): Promise<string> {
+async function extractDocx(file: File): Promise<ExtractedDocument> {
   const mammoth = await import('mammoth');
   const buffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-  return result.value;
+  const images: ExtractedImage[] = [];
+
+  const result = await mammoth.convertToHtml(
+    { arrayBuffer: buffer },
+    {
+      convertImage: mammoth.images.imgElement(async (image) => {
+        const base64 = await image.read('base64');
+        images.push({ dataUrl: `data:${image.contentType};base64,${base64}` });
+        // The data URL is discarded from the HTML output immediately after
+        // (see htmlToBlockText) — we only used convertToHtml to get at this
+        // callback in the first place, so the src content itself is moot.
+        return { src: '' };
+      }),
+    }
+  );
+
+  return { text: htmlToBlockText(result.value), images };
+}
+
+/** Converts mammoth's output HTML to plain text while keeping paragraph/heading breaks. */
+function htmlToBlockText(html: string): string {
+  return html
+    .replace(/<\/(p|h[1-6]|li|tr|div)>/gi, '$&\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
