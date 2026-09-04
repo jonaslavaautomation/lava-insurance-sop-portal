@@ -16,7 +16,10 @@
 ALTER TABLE sop_content
   ADD COLUMN IF NOT EXISTS images jsonb;
 
-CREATE OR REPLACE FUNCTION search_sops(
+-- Postgres won't let CREATE OR REPLACE change a function's output columns,
+-- so this always drops it first - safe since nothing else depends on it.
+DROP FUNCTION IF EXISTS search_sops(uuid, text);
+CREATE FUNCTION search_sops(
   p_company_id uuid,
   p_query text
 )

@@ -259,7 +259,10 @@ CREATE INDEX IF NOT EXISTS idx_sop_versions_doc ON sop_versions(sop_document_id)
 -- ============================================================
 -- Searches published SOP content scoped to an insurance company.
 -- Uses ILIKE for flexible text matching on title, process_category, and content.
-CREATE OR REPLACE FUNCTION search_sops(
+-- Postgres won't let CREATE OR REPLACE change a function's output columns,
+-- so this always drops it first - safe since nothing else depends on it.
+DROP FUNCTION IF EXISTS search_sops(uuid, text);
+CREATE FUNCTION search_sops(
   p_company_id uuid,
   p_query text
 )

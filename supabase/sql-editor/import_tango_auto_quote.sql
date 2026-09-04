@@ -12,9 +12,13 @@
 
 ALTER TABLE sop_content
   ADD COLUMN IF NOT EXISTS content_type text NOT NULL DEFAULT 'text' CHECK (content_type IN ('text', 'steps')),
-  ADD COLUMN IF NOT EXISTS steps jsonb;
+  ADD COLUMN IF NOT EXISTS steps jsonb,
+  ADD COLUMN IF NOT EXISTS images jsonb;
 
-CREATE OR REPLACE FUNCTION search_sops(
+-- Postgres won't let CREATE OR REPLACE change a function's output columns,
+-- so this always drops it first - safe since nothing else depends on it.
+DROP FUNCTION IF EXISTS search_sops(uuid, text);
+CREATE FUNCTION search_sops(
   p_company_id uuid,
   p_query text
 )
@@ -27,6 +31,7 @@ RETURNS TABLE (
   content text,
   content_type text,
   steps jsonb,
+  images jsonb,
   insurance_company_name text
 )
 LANGUAGE sql
@@ -42,6 +47,7 @@ AS $$
     c.content,
     c.content_type,
     c.steps,
+    c.images,
     ic.name
   FROM sop_documents d
   JOIN sop_content c ON c.sop_document_id = d.id
