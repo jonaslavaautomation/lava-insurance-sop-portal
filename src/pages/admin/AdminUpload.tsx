@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, AlertCircle, CheckCircle, ImageIcon, ListOrdered } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertCircle, CheckCircle, ImageIcon, ListOrdered, ShieldCheck, EyeOff } from 'lucide-react';
 import { supabase, type InsuranceCompany, type SopStep } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
 import { StepsViewer } from '@/components/StepsViewer';
+import { ImageRedactor } from '@/components/ImageRedactor';
 
 export default function AdminUpload() {
   const navigate = useNavigate();
@@ -23,6 +24,33 @@ export default function AdminUpload() {
   const [parsing, setParsing] = useState(false);
   const [images, setImages] = useState<ExtractedImage[]>([]);
   const [steps, setSteps] = useState<SopStep[] | null>(null);
+  const [reviewedIndices, setReviewedIndices] = useState<Set<number>>(new Set());
+  const [redactorIndex, setRedactorIndex] = useState<number | null>(null);
+
+  // Unified view of "images that came out of this upload and need a look
+  // before publishing" — whichever source they're in (steps or flat images).
+  const reviewableImages: { index: number; dataUrl: string }[] =
+    steps && steps.length > 0
+      ? steps
+          .map((s, i) => ({ index: i, dataUrl: s.imageUrl }))
+          .filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
+      : images.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
+
+  const allImagesReviewed = reviewableImages.every((r) => reviewedIndices.has(r.index));
+
+  function applyRedaction(index: number, redactedDataUrl: string) {
+    if (steps && steps.length > 0) {
+      setSteps((prev) => (prev ? prev.map((s, i) => (i === index ? { ...s, imageUrl: redactedDataUrl } : s)) : prev));
+    } else {
+      setImages((prev) => prev.map((im, i) => (i === index ? { ...im, dataUrl: redactedDataUrl } : im)));
+    }
+    setReviewedIndices((prev) => new Set(prev).add(index));
+    setRedactorIndex(null);
+  }
+
+  function markNoRedactionNeeded(index: number) {
+    setReviewedIndices((prev) => new Set(prev).add(index));
+  }
 
   useEffect(() => {
     async function load() {
@@ -49,11 +77,13 @@ export default function AdminUpload() {
       setContent(text);
       setImages(extractedImages);
       setSteps(extractedSteps ?? null);
+      setReviewedIndices(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.');
       setFileName('');
       setImages([]);
       setSteps(null);
+      setReviewedIndices(new Set());
     } finally {
       setParsing(false);
     }
@@ -67,6 +97,7 @@ export default function AdminUpload() {
     if (!companyId) { setError('Please select an insurance company.'); return; }
     if (!title.trim()) { setError('Please enter a title.'); return; }
     if (!content.trim()) { setError('Please provide SOP content (paste text or upload a text file).'); return; }
+    if (!allImagesReviewed) { setError('Please review every screenshot for sensitive info before uploading.'); return; }
 
     setSubmitting(true);
 
@@ -248,7 +279,7 @@ export default function AdminUpload() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setSteps(null); setImages([]); setFileName(''); setContent(''); }}
+                  onClick={() => { setSteps(null); setImages([]); setFileName(''); setContent(''); setReviewedIndices(new Set()); }}
                   className="text-xs text-slate-400 hover:text-slate-600 mt-2"
                 >
                   Not right? Clear and paste text instead
@@ -259,7 +290,7 @@ export default function AdminUpload() {
                 <p className="text-xs text-slate-400 text-center">or paste the SOP content below</p>
                 <textarea
                   value={content}
-                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); }}
+                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setReviewedIndices(new Set()); }}
                   rows={12}
                   placeholder="Paste the full SOP document text here..."
                   className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
@@ -269,10 +300,64 @@ export default function AdminUpload() {
           </div>
         </div>
 
+        {reviewableImages.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Review Screenshots for Sensitive Info
+            </label>
+            <p className="text-xs text-slate-400 mb-3">
+              Each screenshot is scanned for likely customer info (names, policy numbers, VINs, contact
+              details, addresses...) — accept, adjust, or draw your own boxes, then apply to black it out.
+              Every screenshot needs a look before this can be uploaded.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {reviewableImages.map(({ index, dataUrl }) => {
+                const reviewed = reviewedIndices.has(index);
+                return (
+                  <div
+                    key={index}
+                    className={`relative rounded-lg border-2 overflow-hidden ${
+                      reviewed ? 'border-green-400' : 'border-amber-300'
+                    }`}
+                  >
+                    <button type="button" onClick={() => setRedactorIndex(index)} className="block w-full">
+                      <img src={dataUrl} alt={`Screenshot ${index + 1}`} className="w-full h-24 object-cover object-top" />
+                    </button>
+                    <div
+                      className={`absolute top-1 right-1 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full pointer-events-none ${
+                        reviewed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {reviewed ? <ShieldCheck className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                      {reviewed ? 'Reviewed' : 'Needs review'}
+                    </div>
+                    {!reviewed && (
+                      <button
+                        type="button"
+                        onClick={() => markNoRedactionNeeded(index)}
+                        className="absolute bottom-1 right-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/90 text-slate-600 hover:bg-white"
+                      >
+                        No PII, skip
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {!allImagesReviewed && (
+              <p className="text-xs text-amber-600 mt-2">
+                {reviewableImages.length - reviewedIndices.size} of {reviewableImages.length} screenshot
+                {reviewableImages.length !== 1 ? 's' : ''} still need{reviewableImages.length === 1 ? 's' : ''} review.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={submitting || parsing}
+            disabled={submitting || parsing || !allImagesReviewed}
+            title={!allImagesReviewed ? 'Review every screenshot for sensitive info first' : undefined}
             className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
@@ -287,6 +372,19 @@ export default function AdminUpload() {
           </button>
         </div>
       </form>
+
+      {redactorIndex !== null && reviewableImages.find((r) => r.index === redactorIndex) && (
+        <div className="fixed inset-0 bg-black/50 z-30 flex items-center justify-center p-4" onClick={() => setRedactorIndex(null)}>
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-slate-900 mb-4">Review Screenshot</h2>
+            <ImageRedactor
+              dataUrl={reviewableImages.find((r) => r.index === redactorIndex)!.dataUrl}
+              onApply={(redacted) => applyRedaction(redactorIndex, redacted)}
+              onCancel={() => setRedactorIndex(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
