@@ -7,7 +7,8 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function StepImage({ src, alt }: { src: string; alt: string }) {
+/** Also used by DocumentViewer, so a broken image looks the same everywhere. */
+export function StepImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
 
   if (failed) {
