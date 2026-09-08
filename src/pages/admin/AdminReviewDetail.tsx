@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, AlertCircle, FileText, History } from 'lucide-react';
 import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany } from '@/lib/supabase';
 import { StepsViewer } from '@/components/StepsViewer';
+import { DocumentViewer } from '@/components/DocumentViewer';
 
 export default function AdminReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -183,21 +184,10 @@ export default function AdminReviewDetail() {
               rows={16}
               className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
             />
-            {content?.images && content.images.length > 0 && (
-              <div className="mt-4 space-y-3">
-                <p className="text-xs font-medium text-slate-500">
-                  {content.images.length} image{content.images.length !== 1 ? 's' : ''} extracted from the upload
-                </p>
-                {content.images.map((img, i) => (
-                  <img
-                    key={i}
-                    src={img.dataUrl}
-                    alt={img.page ? `Page ${img.page} image` : 'Document image'}
-                    className="w-full rounded-lg border border-slate-200"
-                  />
-                ))}
-              </div>
-            )}
+            <div className="mt-4 border border-slate-200 rounded-lg p-4 bg-slate-50">
+              <p className="text-xs font-medium text-slate-500 mb-3">Preview — this is what VAs will see</p>
+              <DocumentViewer content={editableContent} images={content?.images} />
+            </div>
           </>
         )}
       </div>
