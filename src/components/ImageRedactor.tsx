@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, ScanEye, Check, X as XIcon, Info, Square, ArrowUpRight, EyeOff } from 'lucide-react';
+import { Loader2, ScanEye, Check, X as XIcon, Info, Square, ArrowUpRight, EyeOff, PenLine } from 'lucide-react';
 
-type Tool = 'redact' | 'arrow' | 'highlight';
+type Tool = 'redact' | 'arrow' | 'highlight' | 'pen';
+
+interface Point {
+  x: number;
+  y: number;
+}
 
 interface Shape {
   id: string;
@@ -14,8 +19,10 @@ interface Shape {
   // Arrow: end point in natural image px (x/y above is the start point).
   x2?: number;
   y2?: number;
+  // Pen: the freehand stroke path, in natural image px.
+  points?: Point[];
   reason: string;
-  accepted: boolean; // only meaningful for kind === 'redact'; arrows/highlights are always shown
+  accepted: boolean; // only meaningful for kind === 'redact'; arrows/highlights/pen are always shown
   manual: boolean;
 }
 
@@ -24,15 +31,18 @@ interface Draft {
   startY: number;
   curX: number;
   curY: number;
+  points?: Point[]; // pen only, in display px, grows as the stroke is drawn
 }
 
 const DISPLAY_MAX_WIDTH = 720;
 const ARROW_COLOR = '#dc2626';
+const PEN_COLOR = '#000000';
 
 const TOOLS: { id: Tool; label: string; icon: typeof Square }[] = [
   { id: 'redact', label: 'Redact', icon: EyeOff },
   { id: 'arrow', label: 'Arrow', icon: ArrowUpRight },
   { id: 'highlight', label: 'Highlight box', icon: Square },
+  { id: 'pen', label: 'Pen', icon: PenLine },
 ];
 
 /**
@@ -47,6 +57,8 @@ const TOOLS: { id: Tool; label: string; icon: typeof Square }[] = [
  *  - Arrow / Highlight box: Snipping-Tool-style callouts in red, for
  *    pointing out the exact spot in a process — not redaction, the
  *    opposite: drawing attention to something.
+ *  - Pen: a freehand black ballpoint-pen line — circle something, underline
+ *    it, jot a quick note, same as Snipping Tool's pen.
  *
  * Nothing is applied to the actual image until "Apply & Redact".
  */
@@ -156,18 +168,41 @@ export function ImageRedactor({
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    setDraft({ startX: x, startY: y, curX: x, curY: y });
+    setDraft({ startX: x, startY: y, curX: x, curY: y, points: tool === 'pen' ? [{ x, y }] : undefined });
   }
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
     if (!draft) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    setDraft({ ...draft, curX: e.clientX - rect.left, curY: e.clientY - rect.top });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setDraft({
+      ...draft,
+      curX: x,
+      curY: y,
+      points: draft.points ? [...draft.points, { x, y }] : undefined,
+    });
   }
   function handleMouseUp() {
     if (!draft) return;
     const dist = Math.hypot(draft.curX - draft.startX, draft.curY - draft.startY);
 
-    if (tool === 'arrow') {
+    if (tool === 'pen') {
+      if (draft.points && draft.points.length > 1) {
+        setShapes((prev) => [
+          ...prev,
+          {
+            id: `pen-${Date.now()}`,
+            kind: 'pen',
+            x: draft.points![0].x / scale,
+            y: draft.points![0].y / scale,
+            points: draft.points!.map((p) => ({ x: p.x / scale, y: p.y / scale })),
+            reason: 'Pen',
+            accepted: true,
+            manual: true,
+          },
+        ]);
+      }
+    } else if (tool === 'arrow') {
       if (dist > 12) {
         setShapes((prev) => [
           ...prev,
@@ -257,6 +292,15 @@ export function ImageRedactor({
         ctx.strokeRect(s.x, s.y, s.width ?? 0, s.height ?? 0);
       } else if (s.kind === 'arrow') {
         drawArrowOnCanvas(ctx, s.x, s.y, s.x2 ?? s.x, s.y2 ?? s.y);
+      } else if (s.kind === 'pen' && s.points && s.points.length > 1) {
+        ctx.strokeStyle = PEN_COLOR;
+        ctx.lineWidth = Math.max(3, natural.w * 0.003);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+        ctx.stroke();
       }
     }
     onApply(canvas.toDataURL('image/png'));
@@ -265,6 +309,7 @@ export function ImageRedactor({
   const redactCount = shapes.filter((s) => s.kind === 'redact' && s.accepted).length;
   const arrowCount = shapes.filter((s) => s.kind === 'arrow').length;
   const highlightCount = shapes.filter((s) => s.kind === 'highlight').length;
+  const penCount = shapes.filter((s) => s.kind === 'pen').length;
 
   return (
     <div>
@@ -307,7 +352,7 @@ export function ImageRedactor({
               tool === t.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
             }`}
           >
-            <t.icon className="w-3.5 h-3.5" style={t.id !== 'redact' && tool === t.id ? { color: ARROW_COLOR } : undefined} />
+            <t.icon className="w-3.5 h-3.5" style={tool === t.id && (t.id === 'arrow' || t.id === 'highlight') ? { color: ARROW_COLOR } : undefined} />
             {t.label}
           </button>
         ))}
@@ -339,9 +384,11 @@ export function ImageRedactor({
       )}
 
       <p className="text-xs text-slate-400 mb-2">
-        {tool === 'redact'
-          ? 'Click a field chip above to mask every match at once. Click an individual box to toggle it, or a box you drew to remove it. Drag on the image to add your own.'
-          : `Drag on the image to draw a red ${tool === 'arrow' ? 'arrow' : 'highlight box'} pointing at the process. Click one to remove it.`}
+        {tool === 'redact' &&
+          'Click a field chip above to mask every match at once. Click an individual box to toggle it, or a box you drew to remove it. Drag on the image to add your own.'}
+        {(tool === 'arrow' || tool === 'highlight') &&
+          `Drag on the image to draw a red ${tool === 'arrow' ? 'arrow' : 'highlight box'} pointing at the process. Click one to remove it.`}
+        {tool === 'pen' && 'Drag on the image to draw in black pen — circle something, underline it, jot a note. Click a stroke to remove it.'}
       </p>
 
       <div
@@ -357,7 +404,7 @@ export function ImageRedactor({
 
         {/* Rectangle shapes: redact + highlight */}
         {shapes
-          .filter((s) => s.kind !== 'arrow')
+          .filter((s) => s.kind === 'redact' || s.kind === 'highlight')
           .map((s) => (
             <div
               key={s.id}
@@ -393,7 +440,7 @@ export function ImageRedactor({
             </div>
           ))}
 
-        {/* Arrows: SVG overlay (lines can't be drawn with a plain box) */}
+        {/* Arrows + pen strokes: SVG overlay (lines/paths can't be drawn with a plain box) */}
         <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
           <defs>
             <marker id="redactor-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
@@ -415,8 +462,21 @@ export function ImageRedactor({
                 markerEnd="url(#redactor-arrowhead)"
               />
             ))}
+          {shapes
+            .filter((s) => s.kind === 'pen' && s.points)
+            .map((s) => (
+              <polyline
+                key={s.id}
+                points={s.points!.map((p) => `${p.x * scale},${p.y * scale}`).join(' ')}
+                fill="none"
+                stroke={PEN_COLOR}
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
         </svg>
-        {/* Invisible click targets to remove an arrow (SVG above is pointer-events:none) */}
+        {/* Invisible click targets to remove an arrow/pen stroke (SVG above is pointer-events:none) */}
         {shapes
           .filter((s) => s.kind === 'arrow')
           .map((s) => {
@@ -443,34 +503,70 @@ export function ImageRedactor({
               />
             );
           })}
-
-        {draft &&
-          (tool === 'arrow' ? (
-            <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
-              <line
-                x1={draft.startX}
-                y1={draft.startY}
-                x2={draft.curX}
-                y2={draft.curY}
-                stroke={ARROW_COLOR}
-                strokeWidth={4}
-                strokeLinecap="round"
-                strokeDasharray="6 4"
+        {shapes
+          .filter((s) => s.kind === 'pen' && s.points && s.points.length > 0)
+          .map((s) => {
+            const xs = s.points!.map((p) => p.x * scale);
+            const ys = s.points!.map((p) => p.y * scale);
+            const pad = 8;
+            return (
+              <div
+                key={`hit-${s.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShapeClick(s);
+                }}
+                title="Click to remove"
+                className="absolute cursor-pointer"
+                style={{
+                  left: Math.min(...xs) - pad,
+                  top: Math.min(...ys) - pad,
+                  width: Math.max(...xs) - Math.min(...xs) + pad * 2,
+                  height: Math.max(...ys) - Math.min(...ys) + pad * 2,
+                }}
               />
-            </svg>
-          ) : (
-            <div
-              className="absolute border-2 border-dashed"
-              style={{
-                left: Math.min(draft.startX, draft.curX),
-                top: Math.min(draft.startY, draft.curY),
-                width: Math.abs(draft.curX - draft.startX),
-                height: Math.abs(draft.curY - draft.startY),
-                borderColor: tool === 'highlight' ? ARROW_COLOR : '#C22A1D',
-                background: tool === 'highlight' ? 'rgba(220,38,38,0.1)' : 'rgba(194,42,29,0.1)',
-              }}
+            );
+          })}
+
+        {draft && tool === 'arrow' && (
+          <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
+            <line
+              x1={draft.startX}
+              y1={draft.startY}
+              x2={draft.curX}
+              y2={draft.curY}
+              stroke={ARROW_COLOR}
+              strokeWidth={4}
+              strokeLinecap="round"
+              strokeDasharray="6 4"
             />
-          ))}
+          </svg>
+        )}
+        {draft && tool === 'pen' && draft.points && (
+          <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
+            <polyline
+              points={draft.points.map((p) => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke={PEN_COLOR}
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {draft && (tool === 'redact' || tool === 'highlight') && (
+          <div
+            className="absolute border-2 border-dashed"
+            style={{
+              left: Math.min(draft.startX, draft.curX),
+              top: Math.min(draft.startY, draft.curY),
+              width: Math.abs(draft.curX - draft.startX),
+              height: Math.abs(draft.curY - draft.startY),
+              borderColor: tool === 'highlight' ? ARROW_COLOR : '#C22A1D',
+              background: tool === 'highlight' ? 'rgba(220,38,38,0.1)' : 'rgba(194,42,29,0.1)',
+            }}
+          />
+        )}
       </div>
 
       <div className="flex items-center gap-3 mt-4">
@@ -483,12 +579,13 @@ export function ImageRedactor({
           <Check className="w-4 h-4" />
           Apply & Redact
         </button>
-        {(redactCount > 0 || arrowCount > 0 || highlightCount > 0) && (
+        {(redactCount > 0 || arrowCount > 0 || highlightCount > 0 || penCount > 0) && (
           <span className="text-xs text-slate-400">
             {[
               redactCount > 0 ? `${redactCount} redaction${redactCount !== 1 ? 's' : ''}` : null,
               arrowCount > 0 ? `${arrowCount} arrow${arrowCount !== 1 ? 's' : ''}` : null,
               highlightCount > 0 ? `${highlightCount} highlight${highlightCount !== 1 ? 's' : ''}` : null,
+              penCount > 0 ? `${penCount} pen mark${penCount !== 1 ? 's' : ''}` : null,
             ]
               .filter(Boolean)
               .join(' · ')}
