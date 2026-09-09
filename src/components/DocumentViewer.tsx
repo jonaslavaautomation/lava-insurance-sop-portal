@@ -49,13 +49,7 @@ export function DocumentViewer({ content, images }: { content: string; images?: 
       {leftoverImages.length > 0 && (
         <div className="pt-2 space-y-3">
           {leftoverImages.map((img, i) => (
-            <img
-              key={i}
-              src={img.dataUrl}
-              alt={img.page ? `Page ${img.page} image` : 'Document image'}
-              loading="lazy"
-              className="w-full rounded-lg border border-slate-200"
-            />
+            <StepImage key={i} src={img.dataUrl} alt={img.page ? `Page ${img.page} image` : 'Document image'} />
           ))}
         </div>
       )}

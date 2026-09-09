@@ -1,15 +1,20 @@
 import { useState } from 'react';
-import { ImageOff } from 'lucide-react';
+import { ImageOff, Maximize2 } from 'lucide-react';
 import type { SopStep } from '@/lib/supabase';
+import { ImageLightbox } from '@/components/ImageLightbox';
 
 /** Strips the simple HTML Tango descriptions come wrapped in (e.g. <p>...</p>). */
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-/** Also used by DocumentViewer, so a broken image looks the same everywhere. */
+/**
+ * Also used by DocumentViewer, so a broken image — and the click-to-zoom
+ * full view — look and work the same everywhere in the VA portal.
+ */
 export function StepImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
+  const [open, setOpen] = useState(false);
 
   if (failed) {
     return (
@@ -21,13 +26,21 @@ export function StepImage({ src, alt }: { src: string; alt: string }) {
   }
 
   return (
-    <img
-      src={src}
-      alt={alt}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="w-full rounded-lg border border-slate-200"
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="group relative block w-full rounded-lg overflow-hidden border border-slate-200 cursor-zoom-in"
+      >
+        <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className="w-full block" />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white rounded-full p-2">
+            <Maximize2 className="w-4 h-4" />
+          </div>
+        </div>
+      </button>
+      {open && <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
