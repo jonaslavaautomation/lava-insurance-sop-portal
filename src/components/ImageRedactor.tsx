@@ -1,18 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, ScanEye, Check, X as XIcon, Info } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, ScanEye, Check, X as XIcon, Info, Square, ArrowUpRight, EyeOff } from 'lucide-react';
 
-interface Box {
+type Tool = 'redact' | 'arrow' | 'highlight';
+
+interface Shape {
   id: string;
+  kind: Tool;
+  // Rectangle shapes (redact/highlight): box in natural image px.
   x: number;
   y: number;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
+  // Arrow: end point in natural image px (x/y above is the start point).
+  x2?: number;
+  y2?: number;
   reason: string;
-  accepted: boolean;
+  accepted: boolean; // only meaningful for kind === 'redact'; arrows/highlights are always shown
   manual: boolean;
 }
 
-interface DraftBox {
+interface Draft {
   startX: number;
   startY: number;
   curX: number;
@@ -20,15 +27,28 @@ interface DraftBox {
 }
 
 const DISPLAY_MAX_WIDTH = 720;
+const ARROW_COLOR = '#dc2626';
+
+const TOOLS: { id: Tool; label: string; icon: typeof Square }[] = [
+  { id: 'redact', label: 'Redact', icon: EyeOff },
+  { id: 'arrow', label: 'Arrow', icon: ArrowUpRight },
+  { id: 'highlight', label: 'Highlight box', icon: Square },
+];
 
 /**
- * Lets an admin black out sensitive info in an extracted screenshot before
- * it's attached to an SOP. Runs an on-device OCR scan on open and
- * auto-suggests boxes for things it can recognize (emails, phones, VINs,
- * ZIP codes, and labeled fields like "Name:"/"Policy #:") — click a
- * suggestion to accept/reject it. Click-and-drag directly on the image to
- * add your own box for anything the scan misses (an agency name with no
- * label, for instance). Nothing is redacted until "Apply".
+ * Lets an admin annotate an extracted screenshot before it's attached to an
+ * SOP — two things in one tool:
+ *
+ *  - Redact: runs an on-device OCR scan on open and auto-suggests boxes for
+ *    sensitive text it can recognize. Click a field's quick-mask chip to
+ *    accept/reject every instance of that field at once, or click an
+ *    individual box. Drag on the image with the Redact tool active to add
+ *    a box for anything the scan missed.
+ *  - Arrow / Highlight box: Snipping-Tool-style callouts in red, for
+ *    pointing out the exact spot in a process — not redaction, the
+ *    opposite: drawing attention to something.
+ *
+ * Nothing is applied to the actual image until "Apply & Redact".
  */
 export function ImageRedactor({
   dataUrl,
@@ -41,10 +61,11 @@ export function ImageRedactor({
 }) {
   const imgElRef = useRef<HTMLImageElement | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
-  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [shapes, setShapes] = useState<Shape[]>([]);
   const [scanning, setScanning] = useState(true);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<DraftBox | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [tool, setTool] = useState<Tool>('redact');
 
   useEffect(() => {
     let cancelled = false;
@@ -75,18 +96,22 @@ export function ImageRedactor({
 
         const lines = (data.blocks ?? []).flatMap((b) => b.paragraphs.flatMap((p) => p.lines));
         const regions = detectSensitiveRegions(lines);
-        setBoxes(
-          regions.map((r, i) => ({
-            id: `auto-${i}`,
-            x: r.x0,
-            y: r.y0,
-            width: r.x1 - r.x0,
-            height: r.y1 - r.y0,
-            reason: r.reason,
-            accepted: true,
-            manual: false,
-          }))
-        );
+        setShapes((prev) => [
+          ...prev,
+          ...regions.map(
+            (r, i): Shape => ({
+              id: `auto-${i}`,
+              kind: 'redact',
+              x: r.x0,
+              y: r.y0,
+              width: r.x1 - r.x0,
+              height: r.y1 - r.y0,
+              reason: r.reason,
+              accepted: true,
+              manual: false,
+            })
+          ),
+        ]);
       } catch (err) {
         if (!cancelled) {
           setScanError('Automatic scan failed — you can still draw boxes by hand below.');
@@ -107,6 +132,26 @@ export function ImageRedactor({
   const displayW = natural ? natural.w * scale : 0;
   const displayH = natural ? natural.h * scale : 0;
 
+  // Suggested (OCR, non-manual) redaction boxes grouped by field type, for
+  // the one-click "mask this whole field" bar.
+  const fieldGroups = useMemo(() => {
+    const map = new Map<string, Shape[]>();
+    for (const s of shapes) {
+      if (s.kind !== 'redact' || s.manual) continue;
+      if (!map.has(s.reason)) map.set(s.reason, []);
+      map.get(s.reason)!.push(s);
+    }
+    return [...map.entries()];
+  }, [shapes]);
+
+  function toggleFieldGroup(reason: string) {
+    setShapes((prev) => {
+      const group = prev.filter((s) => s.kind === 'redact' && !s.manual && s.reason === reason);
+      const allAccepted = group.length > 0 && group.every((s) => s.accepted);
+      return prev.map((s) => (s.kind === 'redact' && !s.manual && s.reason === reason ? { ...s, accepted: !allAccepted } : s));
+    });
+  }
+
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -120,37 +165,78 @@ export function ImageRedactor({
   }
   function handleMouseUp() {
     if (!draft) return;
-    const x0 = Math.min(draft.startX, draft.curX);
-    const y0 = Math.min(draft.startY, draft.curY);
-    const w = Math.abs(draft.curX - draft.startX);
-    const h = Math.abs(draft.curY - draft.startY);
-    if (w > 4 && h > 4) {
-      setBoxes((prev) => [
-        ...prev,
-        {
-          id: `manual-${Date.now()}-${prev.length}`,
-          x: x0 / scale,
-          y: y0 / scale,
-          width: w / scale,
-          height: h / scale,
-          reason: 'Manual',
-          accepted: true,
-          manual: true,
-        },
-      ]);
+    const dist = Math.hypot(draft.curX - draft.startX, draft.curY - draft.startY);
+
+    if (tool === 'arrow') {
+      if (dist > 12) {
+        setShapes((prev) => [
+          ...prev,
+          {
+            id: `arrow-${Date.now()}`,
+            kind: 'arrow',
+            x: draft.startX / scale,
+            y: draft.startY / scale,
+            x2: draft.curX / scale,
+            y2: draft.curY / scale,
+            reason: 'Pointer',
+            accepted: true,
+            manual: true,
+          },
+        ]);
+      }
+    } else {
+      const x0 = Math.min(draft.startX, draft.curX);
+      const y0 = Math.min(draft.startY, draft.curY);
+      const w = Math.abs(draft.curX - draft.startX);
+      const h = Math.abs(draft.curY - draft.startY);
+      if (w > 4 && h > 4) {
+        setShapes((prev) => [
+          ...prev,
+          {
+            id: `${tool}-${Date.now()}`,
+            kind: tool,
+            x: x0 / scale,
+            y: y0 / scale,
+            width: w / scale,
+            height: h / scale,
+            reason: tool === 'redact' ? 'Manual' : 'Pointer',
+            accepted: true,
+            manual: true,
+          },
+        ]);
+      }
     }
     setDraft(null);
   }
 
-  function toggleOrRemove(box: Box) {
-    if (box.manual) {
-      setBoxes((prev) => prev.filter((b) => b.id !== box.id));
+  function handleShapeClick(shape: Shape) {
+    if (shape.manual) {
+      setShapes((prev) => prev.filter((s) => s.id !== shape.id));
     } else {
-      setBoxes((prev) => prev.map((b) => (b.id === box.id ? { ...b, accepted: !b.accepted } : b)));
+      setShapes((prev) => prev.map((s) => (s.id === shape.id ? { ...s, accepted: !s.accepted } : s)));
     }
   }
 
-  function applyRedactions() {
+  function drawArrowOnCanvas(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
+    const headLength = Math.max(16, natural ? natural.w * 0.02 : 16);
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.strokeStyle = ARROW_COLOR;
+    ctx.fillStyle = ARROW_COLOR;
+    ctx.lineWidth = Math.max(4, natural ? natural.w * 0.005 : 4);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function applyAll() {
     if (!natural || !imgElRef.current) return;
     const canvas = document.createElement('canvas');
     canvas.width = natural.w;
@@ -158,16 +244,27 @@ export function ImageRedactor({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(imgElRef.current, 0, 0);
-    ctx.fillStyle = '#000000';
+
     const pad = 3;
-    for (const b of boxes) {
-      if (!b.accepted) continue;
-      ctx.fillRect(b.x - pad, b.y - pad, b.width + pad * 2, b.height + pad * 2);
+    for (const s of shapes) {
+      if (s.kind === 'redact') {
+        if (!s.accepted) continue;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(s.x - pad, s.y - pad, (s.width ?? 0) + pad * 2, (s.height ?? 0) + pad * 2);
+      } else if (s.kind === 'highlight') {
+        ctx.strokeStyle = ARROW_COLOR;
+        ctx.lineWidth = Math.max(3, natural.w * 0.004);
+        ctx.strokeRect(s.x, s.y, s.width ?? 0, s.height ?? 0);
+      } else if (s.kind === 'arrow') {
+        drawArrowOnCanvas(ctx, s.x, s.y, s.x2 ?? s.x, s.y2 ?? s.y);
+      }
     }
     onApply(canvas.toDataURL('image/png'));
   }
 
-  const acceptedCount = boxes.filter((b) => b.accepted).length;
+  const redactCount = shapes.filter((s) => s.kind === 'redact' && s.accepted).length;
+  const arrowCount = shapes.filter((s) => s.kind === 'arrow').length;
+  const highlightCount = shapes.filter((s) => s.kind === 'highlight').length;
 
   return (
     <div>
@@ -178,12 +275,16 @@ export function ImageRedactor({
               <Loader2 className="w-4 h-4 animate-spin text-brand-600" />
               Scanning for sensitive text…
             </>
+          ) : fieldGroups.length > 0 ? (
+            <>
+              <ScanEye className="w-4 h-4 text-slate-400" />
+              {redactCount} of {shapes.filter((s) => s.kind === 'redact').length} field
+              {shapes.filter((s) => s.kind === 'redact').length !== 1 ? 's' : ''} will be redacted
+            </>
           ) : (
             <>
               <ScanEye className="w-4 h-4 text-slate-400" />
-              {boxes.length > 0
-                ? `${acceptedCount} of ${boxes.length} box${boxes.length !== 1 ? 'es' : ''} will be redacted`
-                : 'No sensitive text auto-detected — draw a box over anything that needs hiding'}
+              No sensitive text auto-detected — use the Redact tool to draw a box over anything that needs hiding
             </>
           )}
         </div>
@@ -195,8 +296,52 @@ export function ImageRedactor({
         </div>
       )}
 
+      {/* Tool selector */}
+      <div className="flex items-center gap-1.5 mb-3">
+        {TOOLS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTool(t.id)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+              tool === t.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'
+            }`}
+          >
+            <t.icon className="w-3.5 h-3.5" style={t.id !== 'redact' && tool === t.id ? { color: ARROW_COLOR } : undefined} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* One-click mask-by-field-type bar */}
+      {fieldGroups.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {fieldGroups.map(([reason, group]) => {
+            const allAccepted = group.every((s) => s.accepted);
+            return (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => toggleFieldGroup(reason)}
+                title={`Click to ${allAccepted ? 'un-redact' : 'redact'} every "${reason}" match on this image`}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                  allAccepted
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-amber-50 text-amber-700 border-amber-300 hover:border-amber-400'
+                }`}
+              >
+                {allAccepted ? '✓ ' : ''}
+                {reason} ({group.length})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <p className="text-xs text-slate-400 mb-2">
-        Click a suggested box to toggle it off/on. Click a box you drew to remove it. Drag on the image to add a new one.
+        {tool === 'redact'
+          ? 'Click a field chip above to mask every match at once. Click an individual box to toggle it, or a box you drew to remove it. Drag on the image to add your own.'
+          : `Drag on the image to draw a red ${tool === 'arrow' ? 'arrow' : 'highlight box'} pointing at the process. Click one to remove it.`}
       </p>
 
       <div
@@ -210,56 +355,149 @@ export function ImageRedactor({
           <img src={dataUrl} alt="Extracted screenshot" style={{ width: displayW, height: displayH, display: 'block' }} draggable={false} />
         )}
 
-        {boxes.map((b) => (
-          <div
-            key={b.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleOrRemove(b);
-            }}
-            title={b.manual ? 'Click to remove' : `${b.reason} — click to ${b.accepted ? 'unredact' : 'redact'}`}
-            className="absolute flex items-center justify-center"
-            style={{
-              left: b.x * scale,
-              top: b.y * scale,
-              width: b.width * scale,
-              height: b.height * scale,
-              background: b.accepted ? 'rgba(15,15,15,0.85)' : 'rgba(234,179,8,0.2)',
-              border: b.accepted ? '1px solid #000' : '2px dashed #eab308',
-              cursor: 'pointer',
-            }}
-          >
-            {!b.accepted && <span className="text-[9px] font-medium text-amber-800 bg-amber-100 px-1 rounded">off</span>}
-          </div>
-        ))}
+        {/* Rectangle shapes: redact + highlight */}
+        {shapes
+          .filter((s) => s.kind !== 'arrow')
+          .map((s) => (
+            <div
+              key={s.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShapeClick(s);
+              }}
+              title={
+                s.kind === 'highlight'
+                  ? 'Click to remove'
+                  : s.manual
+                    ? 'Click to remove'
+                    : `${s.reason} — click to ${s.accepted ? 'unredact' : 'redact'}`
+              }
+              className="absolute flex items-center justify-center"
+              style={{
+                left: s.x * scale,
+                top: s.y * scale,
+                width: (s.width ?? 0) * scale,
+                height: (s.height ?? 0) * scale,
+                cursor: 'pointer',
+                ...(s.kind === 'highlight'
+                  ? { border: `3px solid ${ARROW_COLOR}`, background: 'rgba(220,38,38,0.08)' }
+                  : {
+                      background: s.accepted ? 'rgba(15,15,15,0.85)' : 'rgba(234,179,8,0.2)',
+                      border: s.accepted ? '1px solid #000' : '2px dashed #eab308',
+                    }),
+              }}
+            >
+              {s.kind === 'redact' && !s.accepted && (
+                <span className="text-[9px] font-medium text-amber-800 bg-amber-100 px-1 rounded">off</span>
+              )}
+            </div>
+          ))}
 
-        {draft && (
-          <div
-            className="absolute border-2 border-dashed border-brand-600 bg-brand-600/10"
-            style={{
-              left: Math.min(draft.startX, draft.curX),
-              top: Math.min(draft.startY, draft.curY),
-              width: Math.abs(draft.curX - draft.startX),
-              height: Math.abs(draft.curY - draft.startY),
-            }}
-          />
-        )}
+        {/* Arrows: SVG overlay (lines can't be drawn with a plain box) */}
+        <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
+          <defs>
+            <marker id="redactor-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <polygon points="0 0, 8 3, 0 6" fill={ARROW_COLOR} />
+            </marker>
+          </defs>
+          {shapes
+            .filter((s) => s.kind === 'arrow')
+            .map((s) => (
+              <line
+                key={s.id}
+                x1={s.x * scale}
+                y1={s.y * scale}
+                x2={(s.x2 ?? s.x) * scale}
+                y2={(s.y2 ?? s.y) * scale}
+                stroke={ARROW_COLOR}
+                strokeWidth={4}
+                strokeLinecap="round"
+                markerEnd="url(#redactor-arrowhead)"
+              />
+            ))}
+        </svg>
+        {/* Invisible click targets to remove an arrow (SVG above is pointer-events:none) */}
+        {shapes
+          .filter((s) => s.kind === 'arrow')
+          .map((s) => {
+            const x1 = s.x * scale;
+            const y1 = s.y * scale;
+            const x2 = (s.x2 ?? s.x) * scale;
+            const y2 = (s.y2 ?? s.y) * scale;
+            const pad = 10;
+            return (
+              <div
+                key={`hit-${s.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShapeClick(s);
+                }}
+                title="Click to remove"
+                className="absolute cursor-pointer"
+                style={{
+                  left: Math.min(x1, x2) - pad,
+                  top: Math.min(y1, y2) - pad,
+                  width: Math.abs(x2 - x1) + pad * 2,
+                  height: Math.abs(y2 - y1) + pad * 2,
+                }}
+              />
+            );
+          })}
+
+        {draft &&
+          (tool === 'arrow' ? (
+            <svg className="absolute inset-0 pointer-events-none" width={displayW} height={displayH}>
+              <line
+                x1={draft.startX}
+                y1={draft.startY}
+                x2={draft.curX}
+                y2={draft.curY}
+                stroke={ARROW_COLOR}
+                strokeWidth={4}
+                strokeLinecap="round"
+                strokeDasharray="6 4"
+              />
+            </svg>
+          ) : (
+            <div
+              className="absolute border-2 border-dashed"
+              style={{
+                left: Math.min(draft.startX, draft.curX),
+                top: Math.min(draft.startY, draft.curY),
+                width: Math.abs(draft.curX - draft.startX),
+                height: Math.abs(draft.curY - draft.startY),
+                borderColor: tool === 'highlight' ? ARROW_COLOR : '#C22A1D',
+                background: tool === 'highlight' ? 'rgba(220,38,38,0.1)' : 'rgba(194,42,29,0.1)',
+              }}
+            />
+          ))}
       </div>
 
       <div className="flex items-center gap-3 mt-4">
         <button
           type="button"
-          onClick={applyRedactions}
+          onClick={applyAll}
           disabled={!natural}
           className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
         >
           <Check className="w-4 h-4" />
-          Apply {acceptedCount > 0 ? `& redact ${acceptedCount}` : '(no redactions)'}
+          Apply & Redact
         </button>
+        {(redactCount > 0 || arrowCount > 0 || highlightCount > 0) && (
+          <span className="text-xs text-slate-400">
+            {[
+              redactCount > 0 ? `${redactCount} redaction${redactCount !== 1 ? 's' : ''}` : null,
+              arrowCount > 0 ? `${arrowCount} arrow${arrowCount !== 1 ? 's' : ''}` : null,
+              highlightCount > 0 ? `${highlightCount} highlight${highlightCount !== 1 ? 's' : ''}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        )}
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5"
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5 ml-auto"
         >
           <XIcon className="w-4 h-4" />
           Cancel
