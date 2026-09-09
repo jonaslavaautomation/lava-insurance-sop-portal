@@ -1,7 +1,12 @@
-const NUMERIC_START_RE = /^\d{1,3}[:.]\s/;
-const NUMERIC_MARKER_RE = /(?:^|\s)(\d{1,3})[:.]\s/g;
-const NUMERIC_SPLIT_RE = /(?=(?:^|\s)\d{1,3}[:.]\s)/;
-const NUMERIC_PREFIX_RE = /^\d{1,3}[:.]\s*/;
+// Matches a plain numeric marker ("1: ", "2. ") or one with a "Step" word in
+// front of it ("Step 1: ", "STEP 2. ") — a document is very often built as
+// "Step 1: <heading> / 1. <sub-step> / 2. <sub-step> / Step 2: <heading> /
+// 1. <sub-step> / ...", where the numbering restarts inside every step. All
+// of those still need to become their own separate items.
+const NUMERIC_START_RE = /^(?:step\s+)?\d{1,3}[:.]\s/i;
+const NUMERIC_MARKER_RE = /(?:^|\s)(?:step\s+)?(\d{1,3})[:.]\s/gi;
+const NUMERIC_SPLIT_RE = /(?=(?:^|\s)(?:step\s+)?\d{1,3}[:.]\s)/i;
+const NUMERIC_PREFIX_RE = /^(?:step\s+)?\d{1,3}[:.]\s*/i;
 
 const BULLET_CHARS_G = /[•◦▪●]/g;
 const BULLET_SPLIT_RE = /(?=[•◦▪●])/;
@@ -37,15 +42,12 @@ function splitOnNumericMarkers(text: string): string[] | null {
   if (markerNumbers.length < 3) return null;
 
   // Guard against incidental matches (a time like "3:00", a lone "Section
-  // 2.") by requiring the markers to actually count up 1, 2, 3, ... — real
-  // steps do; stray numbers followed by a colon/period don't.
+  // 2.") by requiring the list to start near the top, like a real
+  // step-by-step doc does — but NOT that the numbers keep climbing
+  // continuously: "Step 1: ... 1. ... 2. ... Step 2: ... 1. ..." is a
+  // completely normal nested/restarting numbering scheme and must still
+  // split into one item per marker, not get rejected as "not a real list".
   if (markerNumbers[0] > 2) return null;
-  let ascendingRun = 1;
-  for (let i = 1; i < markerNumbers.length; i++) {
-    if (markerNumbers[i] === markerNumbers[i - 1] + 1) ascendingRun++;
-    else break;
-  }
-  if (ascendingRun < 3) return null;
 
   const items = text
     .split(NUMERIC_SPLIT_RE)
