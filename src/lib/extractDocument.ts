@@ -16,6 +16,18 @@ export interface ExtractedDocument {
   steps?: SopStep[];
 }
 
+/** Text and images grouped by source page (PDF) — or a single "page"
+ *  standing in for the whole document (Word/plain text, which have no real
+ *  page concept). Used so each page's own images can be matched up with
+ *  that same page's own text instead of naively pairing image N with the
+ *  Nth line item across the whole document — a multi-page SOP commonly has
+ *  one summary screenshot at the end of each page/section, not one
+ *  screenshot per individual line. */
+interface PageBundle {
+  text: string;
+  images: ExtractedImage[];
+}
+
 /**
  * Extracts plain text (and any embedded photos) from an uploaded SOP file,
  * whatever format it came in — PDF, Word (.docx), or plain text/markdown.
@@ -26,49 +38,80 @@ export interface ExtractedDocument {
 export async function extractTextFromFile(file: File): Promise<ExtractedDocument> {
   const ext = file.name.split('.').pop()?.toLowerCase();
 
-  let result: ExtractedDocument;
-  if (ext === 'pdf') result = await extractPdf(file);
-  else if (ext === 'docx') result = await extractDocx(file);
+  let pageBundles: PageBundle[];
+  if (ext === 'pdf') pageBundles = await extractPdfPages(file);
+  else if (ext === 'docx') pageBundles = [await extractDocxPage(file)];
   else if (ext === 'doc') {
     throw new Error(
       'Legacy .doc files aren’t supported — open it in Word and save as .docx, then upload that.'
     );
   } else {
     // .txt, .md, and anything else: treat as plain text, no images.
-    result = { text: await file.text(), images: [] };
+    pageBundles = [{ text: await file.text(), images: [] }];
   }
 
-  const steps = detectNumberedSteps(result.text, result.images);
-  if (steps) return { text: result.text, images: [], steps };
-  return result;
+  const text = pageBundles.map((p) => p.text).join('\n\n');
+  const images = pageBundles.flatMap((p) => p.images);
+
+  const steps = detectNumberedSteps(pageBundles);
+  if (steps) return { text, images: [], steps };
+  return { text, images };
 }
 
 /**
  * Recognizes a document that's really a step-by-step walkthrough — numbered
- * markers ("1: Do this") or bullet points ("• Do this"), each usually
- * followed by its own screenshot — rather than an ordinary prose document.
- * When it matches, folds text + images into the same per-step shape used
- * for a direct Tango import (one image per item, in order), so it renders
- * with the numbered-walkthrough viewer instead of being squeezed into
- * paragraphs. Plain prose with no list structure is left as-is here — it
- * still gets numbered for display, just at render time (see
- * DocumentViewer), since there's no reliable way to say which image goes
- * with which paragraph without an explicit list to anchor on.
+ * markers ("1: Do this", "Step 1: Do this") and/or bullet points
+ * ("• Do this"), mixed however the source document actually uses them —
+ * rather than an ordinary prose document. When it matches, folds text +
+ * images into the same per-step shape used for a direct Tango import, so it
+ * renders with the numbered-walkthrough viewer instead of being squeezed
+ * into paragraphs.
+ *
+ * Images are matched to items page-by-page, not by a single global index:
+ * each page's own images are attached to the tail end of that same page's
+ * own items (where a summary screenshot typically sits — after the
+ * instructions it illustrates, not smeared across the very first few
+ * items). A page with more images than items, or vice versa, just leaves
+ * the extras unmatched (no image, or dropped to the page's last item) —
+ * there's no way to be more precise than that without much deeper layout
+ * analysis, and this is still far closer than a flat 1-to-1 guess.
  */
-function detectNumberedSteps(text: string, images: ExtractedImage[]): SopStep[] | null {
-  const titles = splitIntoListItems(text);
+function detectNumberedSteps(pageBundles: PageBundle[]): SopStep[] | null {
+  const fullText = pageBundles.map((p) => p.text).join('\n\n');
+  const titles = splitIntoListItems(fullText);
   if (!titles || titles.length < 3) return null;
+
+  // How many of the final items came from each page, by re-running the same
+  // split against the text accumulated through that page. Small documents
+  // (a handful of pages), so re-splitting a few extra times is cheap.
+  let cumulativeText = '';
+  let prevCount = 0;
+  const imageAtItemIndex = new Map<number, ExtractedImage>();
+
+  for (const { text: pageText, images: pageImages } of pageBundles) {
+    cumulativeText += (cumulativeText ? '\n\n' : '') + pageText;
+    const count = splitIntoListItems(cumulativeText)?.length ?? prevCount;
+
+    // Place this page's images at the end of its own item range, working
+    // backwards so several images on one page stack correctly instead of
+    // overwriting the same slot.
+    let slot = count - 1;
+    for (let k = pageImages.length - 1; k >= 0 && slot >= prevCount; k--, slot--) {
+      imageAtItemIndex.set(slot, pageImages[k]);
+    }
+    prevCount = count;
+  }
 
   return titles.map((title, i) => ({
     stepIndex: i,
     title,
     description: '',
-    imageUrl: images[i]?.dataUrl ?? null,
+    imageUrl: imageAtItemIndex.get(i)?.dataUrl ?? null,
     sourceUrl: null,
   }));
 }
 
-async function extractPdf(file: File): Promise<ExtractedDocument> {
+async function extractPdfPages(file: File): Promise<PageBundle[]> {
   // Dynamically imported: pdfjs-dist is large (~1MB+) and VAs never need
   // it — no reason to make every visitor download it up front.
   const [pdfjsLib, { default: pdfjsWorkerUrl }] = await Promise.all([
@@ -80,26 +123,26 @@ async function extractPdf(file: File): Promise<ExtractedDocument> {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
-  const pages: string[] = [];
-  const images: ExtractedImage[] = [];
+  const pageBundles: PageBundle[] = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
 
     const content = await page.getTextContent();
     const text = reconstructLayout(content.items);
-    if (text) pages.push(text);
 
+    let images: ExtractedImage[] = [];
     try {
-      const pageImages = await extractPdfPageImages(pdfjsLib, page, pageNum);
-      images.push(...pageImages);
+      images = await extractPdfPageImages(pdfjsLib, page, pageNum);
     } catch {
       // A page's images failing to extract shouldn't block the rest of the
       // document — the text for this SOP still comes through fine.
     }
+
+    pageBundles.push({ text, images });
   }
 
-  return { text: pages.join('\n\n'), images };
+  return pageBundles;
 }
 
 async function extractPdfPageImages(
@@ -222,7 +265,7 @@ function mode(values: number[]): number | null {
   return best;
 }
 
-async function extractDocx(file: File): Promise<ExtractedDocument> {
+async function extractDocxPage(file: File): Promise<PageBundle> {
   const mammoth = await import('mammoth');
   const buffer = await file.arrayBuffer();
   const images: ExtractedImage[] = [];
