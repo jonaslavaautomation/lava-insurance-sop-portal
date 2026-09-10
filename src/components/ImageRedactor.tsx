@@ -53,7 +53,9 @@ const TOOLS: { id: Tool; label: string; icon: typeof Square }[] = [
  *    sensitive text it can recognize. Click a field's quick-mask chip to
  *    accept/reject every instance of that field at once, or click an
  *    individual box. Drag on the image with the Redact tool active to add
- *    a box for anything the scan missed.
+ *    a box for anything the scan missed. Applied areas are pixelated, not
+ *    blurred or blacked out — a real mosaic that destroys the underlying
+ *    pixels (unlike Gaussian blur, which can sometimes be reversed).
  *  - Arrow / Highlight box: Snipping-Tool-style callouts in red, for
  *    pointing out the exact spot in a process — not redaction, the
  *    opposite: drawing attention to something.
@@ -252,6 +254,43 @@ export function ImageRedactor({
     }
   }
 
+  /**
+   * True pixelation/mosaic, not blur: draws the region at a tiny size
+   * (letting the browser average many source pixels into each one) then
+   * draws that tiny result back up with smoothing off (hard block edges,
+   * no interpolation). Unlike Gaussian blur, this genuinely destroys the
+   * underlying detail — there's no way to mathematically reverse an
+   * averaging step back to the original pixels, which is exactly why real
+   * redaction tools (and broadcast face/plate blurring) use pixelation
+   * instead of blur.
+   */
+  function pixelateRegion(ctx: CanvasRenderingContext2D, source: HTMLImageElement, x: number, y: number, width: number, height: number) {
+    if (!natural || width <= 0 || height <= 0) return;
+    // Clamp to the image bounds — drawImage throws if the source rect falls
+    // outside the source image (a box near an edge, after padding, can).
+    const sx = Math.max(0, x);
+    const sy = Math.max(0, y);
+    const sw = Math.min(natural.w, x + width) - sx;
+    const sh = Math.min(natural.h, y + height) - sy;
+    if (sw <= 0 || sh <= 0) return;
+
+    const blockSize = Math.max(8, Math.min(sw, sh) / 4);
+    const smallW = Math.max(1, Math.round(sw / blockSize));
+    const smallH = Math.max(1, Math.round(sh / blockSize));
+
+    const small = document.createElement('canvas');
+    small.width = smallW;
+    small.height = smallH;
+    const smallCtx = small.getContext('2d');
+    if (!smallCtx) return;
+    smallCtx.imageSmoothingEnabled = true;
+    smallCtx.drawImage(source, sx, sy, sw, sh, 0, 0, smallW, smallH);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(small, 0, 0, smallW, smallH, sx, sy, sw, sh);
+    ctx.imageSmoothingEnabled = true;
+  }
+
   function drawArrowOnCanvas(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
     const headLength = Math.max(16, natural ? natural.w * 0.02 : 16);
     const angle = Math.atan2(y2 - y1, x2 - x1);
@@ -284,8 +323,7 @@ export function ImageRedactor({
     for (const s of shapes) {
       if (s.kind === 'redact') {
         if (!s.accepted) continue;
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(s.x - pad, s.y - pad, (s.width ?? 0) + pad * 2, (s.height ?? 0) + pad * 2);
+        pixelateRegion(ctx, imgElRef.current, s.x - pad, s.y - pad, (s.width ?? 0) + pad * 2, (s.height ?? 0) + pad * 2);
       } else if (s.kind === 'highlight') {
         ctx.strokeStyle = ARROW_COLOR;
         ctx.lineWidth = Math.max(3, natural.w * 0.004);
@@ -428,10 +466,18 @@ export function ImageRedactor({
                 cursor: 'pointer',
                 ...(s.kind === 'highlight'
                   ? { border: `3px solid ${ARROW_COLOR}`, background: 'rgba(220,38,38,0.08)' }
-                  : {
-                      background: s.accepted ? 'rgba(15,15,15,0.85)' : 'rgba(234,179,8,0.2)',
-                      border: s.accepted ? '1px solid #000' : '2px dashed #eab308',
-                    }),
+                  : s.accepted
+                    ? {
+                        // Live preview only — a soft, clean-looking blur.
+                        // What actually gets saved (applyAll/pixelateRegion)
+                        // is true pixelation, not this: blur alone can be
+                        // reversed, pixelation can't. See the comment there.
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                        background: 'rgba(255,255,255,0.25)',
+                        border: '1px solid rgba(15,15,15,0.35)',
+                      }
+                    : { background: 'rgba(234,179,8,0.2)', border: '2px dashed #eab308' }),
               }}
             >
               {s.kind === 'redact' && !s.accepted && (
