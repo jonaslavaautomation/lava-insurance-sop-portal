@@ -67,8 +67,8 @@ export default function AdminLibrary() {
     };
     const s = map[status] ?? map.pending;
     return (
-      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${s.class}`}>
-        <s.icon className="w-3 h-3" />
+      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${s.class}`}>
+        <s.icon className="w-3.5 h-3.5" />
         {s.label}
       </span>
     );
@@ -85,27 +85,27 @@ export default function AdminLibrary() {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-lg font-semibold text-slate-50 mb-0.5">SOP Library</h1>
-      <p className="text-slate-500 text-xs mb-4">Browse, search, and manage all SOP documents</p>
+    <div className="p-8">
+      <h1 className="text-3xl font-bold text-slate-50 mb-1">SOP Library</h1>
+      <p className="text-slate-500 text-base mb-6">Browse, search, and manage all SOP documents</p>
 
-      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-3.5 mb-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mb-3">
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search SOPs..."
-              className="w-full pl-8 pr-3 py-2 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-[13px] text-slate-100 placeholder:text-slate-600"
+              className="w-full h-11 pl-10 pr-3 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600"
             />
           </div>
-          <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-2 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-[13px] text-slate-200">
+          <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="h-11 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200">
             <option value="all" className="bg-ink-secondary">All Companies</option>
             {companies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
           </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-[13px] text-slate-200">
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-11 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200">
             <option value="all" className="bg-ink-secondary">All Statuses</option>
             <option value="published" className="bg-ink-secondary">Published</option>
             <option value="pending" className="bg-ink-secondary">Pending Review</option>
@@ -113,12 +113,12 @@ export default function AdminLibrary() {
           </select>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {['ALL', ...categories].map((cat) => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`text-[11px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs font-medium uppercase tracking-wide px-3 py-1.5 rounded-full border transition-colors ${
                 activeCategory === cat
                   ? 'bg-brand-600/20 border-brand-500/40 text-brand-400'
                   : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'
@@ -130,25 +130,25 @@ export default function AdminLibrary() {
         </div>
       </div>
 
-      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg overflow-hidden">
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl overflow-hidden">
         {loading ? (
           <LoadingState label="Loading SOP library..." />
         ) : filtered.length === 0 ? (
           <EmptyState icon={FileText} title="No SOPs found" description="Try adjusting your filters, or upload a new SOP." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead className="bg-white/[0.02] border-b border-white/[0.08]">
                 <tr>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">SOP Title</th>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Carrier</th>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Category</th>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Version</th>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Status</th>
-                  <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Views</th>
-                  <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Likes</th>
-                  <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">Updated</th>
-                  <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Actions</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">SOP Title</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden lg:table-cell">Carrier</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Category</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Version</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Status</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Views</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Likes</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden sm:table-cell">Updated</th>
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
@@ -156,24 +156,24 @@ export default function AdminLibrary() {
                   const e = engagement[doc.id];
                   return (
                     <tr key={doc.id} className="hover:bg-white/[0.03] transition-colors">
-                      <td className="px-4 py-2.5">
-                        <p className="font-medium text-slate-100 truncate max-w-[220px]">{doc.title}</p>
-                        <p className="text-[11px] text-slate-500">{doc.line_of_business}</p>
+                      <td className="px-5 py-4">
+                        <p className="font-medium text-slate-100 truncate max-w-[240px]">{doc.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{doc.line_of_business}</p>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-400 hidden lg:table-cell">{companyMap[doc.insurance_company_id] ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-slate-400 hidden md:table-cell">{doc.process_category}</td>
-                      <td className="px-4 py-2.5 text-slate-400 font-mono hidden md:table-cell">v{doc.version}</td>
-                      <td className="px-4 py-2.5">{statusBadge(doc.status)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-slate-300">
-                        <span className="inline-flex items-center gap-1"><Eye className="w-3 h-3 text-slate-600" />{e?.view_count ?? 0}</span>
+                      <td className="px-5 py-4 text-slate-400 hidden lg:table-cell">{companyMap[doc.insurance_company_id] ?? '—'}</td>
+                      <td className="px-5 py-4 text-slate-400 hidden md:table-cell">{doc.process_category}</td>
+                      <td className="px-5 py-4 text-slate-400 font-mono hidden md:table-cell">v{doc.version}</td>
+                      <td className="px-5 py-4">{statusBadge(doc.status)}</td>
+                      <td className="px-5 py-4 text-right font-mono text-slate-300">
+                        <span className="inline-flex items-center gap-1.5"><Eye className="w-3.5 h-3.5 text-slate-600" />{e?.view_count ?? 0}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-slate-300">
-                        <span className="inline-flex items-center gap-1"><ThumbsUp className="w-3 h-3 text-slate-600" />{e?.like_count ?? 0}</span>
+                      <td className="px-5 py-4 text-right font-mono text-slate-300">
+                        <span className="inline-flex items-center gap-1.5"><ThumbsUp className="w-3.5 h-3.5 text-slate-600" />{e?.like_count ?? 0}</span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px] hidden sm:table-cell">{timeAgo(doc.updated_at)}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <Link to={`/admin/review/${doc.id}`} className="inline-flex items-center gap-1 text-brand-400 hover:text-brand-300 font-medium">
-                          <Eye className="w-3.5 h-3.5" /> Review
+                      <td className="px-5 py-4 text-slate-500 font-mono text-xs hidden sm:table-cell">{timeAgo(doc.updated_at)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <Link to={`/admin/review/${doc.id}`} className="inline-flex items-center gap-1.5 text-brand-400 hover:text-brand-300 font-medium">
+                          <Eye className="w-4 h-4" /> Review
                         </Link>
                       </td>
                     </tr>

@@ -158,8 +158,8 @@ export default function AdminAnalytics() {
     };
     const s = map[status] ?? map.pending;
     return (
-      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${s.class}`}>
-        <s.icon className="w-3 h-3" />
+      <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${s.class}`}>
+        <s.icon className="w-3.5 h-3.5" />
         {s.label}
       </span>
     );
@@ -177,27 +177,27 @@ export default function AdminAnalytics() {
   }) {
     const visible = showAll ? data : data.slice(0, TOP_N);
     return (
-      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
-          <h2 className="text-[13px] font-semibold text-slate-200">{title}</h2>
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08]">
+          <h2 className="text-xl font-semibold text-slate-200">{title}</h2>
           {data.length > TOP_N && (
-            <button onClick={onToggleShowAll} className="text-xs text-brand-400 hover:text-brand-300 font-medium">
+            <button onClick={onToggleShowAll} className="text-sm text-brand-400 hover:text-brand-300 font-medium">
               {showAll ? 'Show top 10' : `Show all ${data.length}`}
             </button>
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full text-sm">
             <thead className="bg-white/[0.02] border-b border-white/[0.08]">
               <tr>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Rank</th>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">SOP / Process Name</th>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Carrier</th>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Category</th>
-                <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">{primaryLabel}</th>
-                <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">{secondaryLabel}</th>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">{lastLabel}</th>
-                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Status</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Rank</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">SOP / Process Name</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Carrier</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Category</th>
+                <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">{primaryLabel}</th>
+                <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden sm:table-cell">{secondaryLabel}</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden lg:table-cell">{lastLabel}</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
@@ -206,17 +206,17 @@ export default function AdminAnalytics() {
               ) : (
                 visible.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-white/[0.03] transition-colors">
-                    <td className="px-4 py-2.5 text-slate-500 font-mono">{idx + 1}</td>
-                    <td className="px-4 py-2.5">
-                      <p className="font-medium text-slate-100 truncate max-w-[220px]">{row.title}</p>
-                      <p className="text-[11px] text-slate-500">{row.line_of_business}</p>
+                    <td className="px-5 py-4 text-slate-500 font-mono">{idx + 1}</td>
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-slate-100 truncate max-w-[240px]">{row.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{row.line_of_business}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-400 hidden md:table-cell">{row.company_name}</td>
-                    <td className="px-4 py-2.5 text-slate-400 hidden md:table-cell">{row.process_category}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-100">{row[primaryKey]}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-slate-400 hidden sm:table-cell">{row[secondaryKey]}</td>
-                    <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px] hidden lg:table-cell">{formatDate(row[lastKey])}</td>
-                    <td className="px-4 py-2.5">{statusBadge(row.status)}</td>
+                    <td className="px-5 py-4 text-slate-400 hidden md:table-cell">{row.company_name}</td>
+                    <td className="px-5 py-4 text-slate-400 hidden md:table-cell">{row.process_category}</td>
+                    <td className="px-5 py-4 text-right font-mono font-semibold text-slate-100">{row[primaryKey]}</td>
+                    <td className="px-5 py-4 text-right font-mono text-slate-400 hidden sm:table-cell">{row[secondaryKey]}</td>
+                    <td className="px-5 py-4 text-slate-500 font-mono text-xs hidden lg:table-cell">{formatDate(row[lastKey])}</td>
+                    <td className="px-5 py-4">{statusBadge(row.status)}</td>
                   </tr>
                 ))
               )}
@@ -228,27 +228,27 @@ export default function AdminAnalytics() {
   }
 
   if (loading) {
-    return <div className="p-6 text-slate-500 text-xs animate-pulse">Loading analytics...</div>;
+    return <div className="p-8 text-slate-500 text-sm animate-pulse">Loading analytics...</div>;
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-0.5 flex-wrap gap-3">
-        <h1 className="text-lg font-semibold text-slate-50">SOP Analytics</h1>
-        <div className="flex items-center gap-2">
-          <Calendar className="w-3.5 h-3.5 text-slate-500" />
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-slate-50">SOP Analytics</h1>
+        <div className="flex items-center gap-2.5">
+          <Calendar className="w-4 h-4 text-slate-500" />
           <select
             value={range}
             onChange={(e) => setRange(e.target.value as DateRange)}
-            className="px-2.5 py-1.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-xs text-slate-200"
+            className="h-10 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200"
           >
             {RANGE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value} className="bg-ink-secondary">{opt.label}</option>)}
           </select>
         </div>
       </div>
-      <p className="text-slate-500 text-xs mb-5">SOP engagement: views, likes, and searches across the knowledge base</p>
+      <p className="text-slate-500 text-base mb-8">SOP engagement: views, likes, and searches across the knowledge base</p>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <KPICard label="Total SOPs" value={totalSops} icon={FileText} accent="brand" />
         <KPICard label="Total Views" value={totalViews} icon={Eye} accent="sky" />
         <KPICard label="Total Likes" value={totalLikes} icon={ThumbsUp} accent="emerald" />
@@ -256,7 +256,7 @@ export default function AdminAnalytics() {
         <KPICard label="Active VAs" value={activeVaCount} icon={Users} accent="amber" />
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         <EngagementTable
           title="Most Viewed SOPs" data={mostViewed} showAll={showAllViewed} onToggleShowAll={() => setShowAllViewed((v) => !v)}
           primaryLabel="Views" primaryKey="view_count" secondaryLabel="Likes" secondaryKey="like_count"
@@ -268,19 +268,19 @@ export default function AdminAnalytics() {
           lastLabel="Last Liked" lastKey="last_liked_at"
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Search className="w-3.5 h-3.5 text-cyan-400" />
-              <h2 className="text-[13px] font-semibold text-slate-200">Top Search Terms</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <Search className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-xl font-semibold text-slate-200">Top Search Terms</h2>
             </div>
             {topSearchTerms.length === 0 ? (
               <EmptyState title="No searches logged yet." />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {topSearchTerms.map(([term, count], i) => (
-                  <div key={term} className="flex items-center justify-between text-[13px]">
-                    <span className="text-slate-300 truncate"><span className="text-slate-600 font-mono mr-2">{String(i + 1).padStart(2, '0')}</span>{term}</span>
+                  <div key={term} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-300 truncate"><span className="text-slate-600 font-mono mr-2.5">{String(i + 1).padStart(2, '0')}</span>{term}</span>
                     <span className="font-mono text-slate-500 flex-shrink-0">{count}</span>
                   </div>
                 ))}
@@ -288,19 +288,19 @@ export default function AdminAnalytics() {
             )}
           </div>
 
-          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <SearchX className="w-3.5 h-3.5 text-red-400" />
-              <h2 className="text-[13px] font-semibold text-slate-200">Searches With No Results</h2>
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <SearchX className="w-4 h-4 text-red-400" />
+              <h2 className="text-xl font-semibold text-slate-200">Searches With No Results</h2>
             </div>
             {zeroResultSearches.length === 0 ? (
               <EmptyState title="No zero-result searches - nice." />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {zeroResultSearches.map((s) => (
-                  <div key={`${s.search_query}-${s.created_at}`} className="flex items-center justify-between text-[13px]">
+                  <div key={`${s.search_query}-${s.created_at}`} className="flex items-center justify-between text-sm">
                     <span className="text-slate-300 truncate">{s.search_query}</span>
-                    <span className="font-mono text-[11px] text-slate-600 flex-shrink-0">{formatDate(s.created_at)}</span>
+                    <span className="font-mono text-xs text-slate-600 flex-shrink-0">{formatDate(s.created_at)}</span>
                   </div>
                 ))}
               </div>

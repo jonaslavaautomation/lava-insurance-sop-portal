@@ -147,37 +147,38 @@ export default function AdminUpload() {
     setTimeout(() => navigate('/admin/review'), 1500);
   }
 
-  if (loading) return <div className="p-6"><LoadingState label="Loading..." /></div>;
+  if (loading) return <div className="p-8"><LoadingState label="Loading..." /></div>;
 
   if (companies.length === 0) {
     return (
-      <div className="p-6">
-        <h1 className="text-lg font-semibold text-slate-50 mb-1">Upload SOP</h1>
-        <div className="mt-6"><ErrorState message="You need to add an insurance company before uploading SOPs." /></div>
+      <div className="p-8">
+        <h1 className="text-3xl font-bold text-slate-50 mb-1">Upload SOP</h1>
+        <div className="mt-8"><ErrorState message="You need to add an insurance company before uploading SOPs." /></div>
       </div>
     );
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600";
-  const labelClass = "block text-xs font-medium text-slate-400 mb-1.5";
+  const inputClass = "w-full h-11 px-4 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600";
+  const textareaClass = "w-full px-4 py-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600";
+  const labelClass = "block text-sm font-medium text-slate-400 mb-2";
 
   return (
-    <div className="p-6 max-w-3xl">
-      <h1 className="text-lg font-semibold text-slate-50 mb-1">Upload SOP Document</h1>
-      <p className="text-slate-500 text-xs mb-5">
+    <div className="p-8 max-w-3xl">
+      <h1 className="text-3xl font-bold text-slate-50 mb-1">Upload SOP Document</h1>
+      <p className="text-slate-500 text-base mb-6">
         Upload a PDF, Word document, or plain text file — the text is extracted automatically and
         normalized to the same format VAs see for every SOP, no matter what it was uploaded as.
       </p>
 
       {success && (
-        <div className="mb-5 flex items-center gap-2 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3">
+        <div className="mb-6 flex items-center gap-2.5 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3.5">
           <ShieldCheck className="w-4 h-4" /> SOP uploaded successfully. Redirecting to review...
         </div>
       )}
 
-      {error && <div className="mb-5"><ErrorState message={error} /></div>}
+      {error && <div className="mb-6"><ErrorState message={error} /></div>}
 
-      <form onSubmit={handleSubmit} className="bg-[#121723]/80 rounded-lg border border-white/[0.08] p-5 space-y-5">
+      <form onSubmit={handleSubmit} className="bg-[#121723]/80 rounded-xl border border-white/[0.08] p-6 space-y-6">
         <div>
           <label className={labelClass}>Insurance Company</label>
           <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={inputClass}>
@@ -196,7 +197,7 @@ export default function AdminUpload() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
           <div>
             <label className={labelClass}>Line of Business</label>
             <select value={lineOfBusiness} onChange={(e) => setLineOfBusiness(e.target.value)} className={inputClass}>
@@ -282,7 +283,7 @@ export default function AdminUpload() {
                   onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setReviewedIndices(new Set()); }}
                   rows={12}
                   placeholder="Paste the full SOP document text here..."
-                  className={`${inputClass} font-mono resize-y`}
+                  className={`${textareaClass} font-mono resize-y`}
                 />
               </>
             )}
@@ -347,7 +348,7 @@ export default function AdminUpload() {
             type="submit"
             disabled={submitting || parsing || !allImagesReviewed}
             title={!allImagesReviewed ? 'Review every screenshot for sensitive info first' : undefined}
-            className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 py-2.5 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
+            className="h-11 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 rounded-lg transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             Upload SOP
@@ -355,7 +356,7 @@ export default function AdminUpload() {
           <button
             type="button"
             onClick={() => navigate('/admin/library')}
-            className="text-sm text-slate-500 hover:text-slate-300 px-4 py-2.5"
+            className="h-11 text-sm text-slate-500 hover:text-slate-300 px-4"
           >
             Cancel
           </button>

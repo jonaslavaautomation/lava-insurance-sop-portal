@@ -90,48 +90,48 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         className="w-full max-w-xl bg-[#0D111B] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.08]">
-          <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/[0.08]">
+          <Search className="w-5 h-5 text-slate-500 flex-shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search SOPs, carriers..."
-            className="flex-1 bg-transparent text-sm text-slate-100 placeholder:text-slate-600 outline-none"
+            className="flex-1 bg-transparent text-base text-slate-100 placeholder:text-slate-600 outline-none"
             aria-label="Search SOPs and insurance companies"
           />
-          {loading && <Loader2 className="w-3.5 h-3.5 text-slate-500 animate-spin flex-shrink-0" />}
-          <kbd className="text-[10px] font-mono text-slate-500 border border-white/10 rounded px-1.5 py-0.5 flex-shrink-0">ESC</kbd>
+          {loading && <Loader2 className="w-4 h-4 text-slate-500 animate-spin flex-shrink-0" />}
+          <kbd className="text-xs font-mono text-slate-500 border border-white/10 rounded px-1.5 py-0.5 flex-shrink-0">ESC</kbd>
         </div>
 
-        <div className="max-h-80 overflow-y-auto py-1.5">
+        <div className="max-h-80 overflow-y-auto py-2">
           {query.trim() === '' ? (
-            <p className="px-4 py-6 text-xs text-slate-600 text-center">Type to search SOPs or insurance companies</p>
+            <p className="px-5 py-7 text-sm text-slate-600 text-center">Type to search SOPs or insurance companies</p>
           ) : !loading && hits.length === 0 ? (
-            <p className="px-4 py-6 text-xs text-slate-600 text-center">No results for &ldquo;{query}&rdquo;</p>
+            <p className="px-5 py-7 text-sm text-slate-600 text-center">No results for &ldquo;{query}&rdquo;</p>
           ) : (
             hits.map((hit, i) => (
               <button
                 key={`${hit.kind}-${hit.id}`}
                 onClick={() => select(hit)}
                 onMouseEnter={() => setActiveIndex(i)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                className={`w-full flex items-center gap-3.5 px-5 py-3.5 text-left transition-colors ${
                   i === activeIndex ? 'bg-white/[0.06]' : ''
                 }`}
               >
-                <div className="w-6 h-6 rounded-md bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-md bg-white/[0.04] flex items-center justify-center flex-shrink-0">
                   {hit.kind === 'sop' ? (
-                    <FileText className="w-3.5 h-3.5 text-brand-400" />
+                    <FileText className="w-4 h-4 text-brand-400" />
                   ) : (
-                    <Building2 className="w-3.5 h-3.5 text-sky-400" />
+                    <Building2 className="w-4 h-4 text-sky-400" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-slate-100 truncate">{hit.kind === 'sop' ? hit.title : hit.name}</p>
-                  {hit.kind === 'sop' && <p className="text-[11px] text-slate-500 truncate">{hit.process_category}</p>}
+                  <p className="text-base text-slate-100 truncate">{hit.kind === 'sop' ? hit.title : hit.name}</p>
+                  {hit.kind === 'sop' && <p className="text-xs text-slate-500 truncate">{hit.process_category}</p>}
                 </div>
-                {i === activeIndex && <CornerDownLeft className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />}
+                {i === activeIndex && <CornerDownLeft className="w-4 h-4 text-slate-600 flex-shrink-0" />}
               </button>
             ))
           )}

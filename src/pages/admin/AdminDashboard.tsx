@@ -117,18 +117,18 @@ export default function AdminDashboard() {
 
   const engagementSpark = useMemo(() => daily.slice(-14).map((d) => d.view_count + d.like_count), [daily]);
 
-  if (loading) return <div className="p-6"><LoadingState label="Loading dashboard..." /></div>;
+  if (loading) return <div className="p-8"><LoadingState label="Loading dashboard..." /></div>;
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-lg font-semibold text-slate-50">Dashboard</h1>
-          <p className="text-slate-500 text-xs mt-0.5">Overview of your SOP knowledge base</p>
+          <h1 className="text-3xl font-bold text-slate-50">Dashboard</h1>
+          <p className="text-slate-500 text-base mt-1.5">Overview of your SOP knowledge base</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <KPICard
           label="Insurance Companies"
           value={stats.companies}
@@ -167,16 +167,16 @@ export default function AdminDashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[65%_35%] gap-4">
-        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-[13px] font-semibold text-slate-200">SOP Engagement</h2>
-            <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-md p-0.5">
+      <div className="grid grid-cols-1 xl:grid-cols-[65%_35%] gap-8">
+        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-8">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xl font-semibold text-slate-200">SOP Engagement</h2>
+            <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-lg p-1">
               {([7, 30, 90] as RangeDays[]).map((r) => (
                 <button
                   key={r}
                   onClick={() => setRange(r)}
-                  className={`text-[11px] font-mono px-2 py-1 rounded ${
+                  className={`text-sm font-mono px-3 py-1.5 rounded-md ${
                     range === r ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-300'
                   }`}
                 >
@@ -185,7 +185,7 @@ export default function AdminDashboard() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-5 mb-3 text-[11px]">
+          <div className="flex items-center gap-6 mb-5 text-sm">
             <span className="text-slate-500">Total Views <span className="font-mono text-slate-200">{totalViewsInRange}</span></span>
             <span className="text-slate-500">Total Likes <span className="font-mono text-slate-200">{totalLikesInRange}</span></span>
             <span className={`font-mono ${viewTrend.direction === 'up' ? 'text-emerald-400' : viewTrend.direction === 'down' ? 'text-red-400' : 'text-slate-500'}`}>
@@ -194,9 +194,9 @@ export default function AdminDashboard() {
           </div>
 
           {visibleDaily.every((d) => d.view_count === 0 && d.like_count === 0) ? (
-            <p className="text-xs text-slate-600 text-center py-16">No engagement data available yet.</p>
+            <p className="text-sm text-slate-600 text-center py-16">No engagement data available yet.</p>
           ) : (
-            <div className="h-56">
+            <div className="h-[420px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={visibleDaily} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
                   <defs>
@@ -213,15 +213,15 @@ export default function AdminDashboard() {
                   <XAxis
                     dataKey="day"
                     tickFormatter={(d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    tick={{ fill: '#64748B', fontSize: 10, fontFamily: 'ui-monospace, monospace' }}
+                    tick={{ fill: '#64748B', fontSize: 12, fontFamily: 'ui-monospace, monospace' }}
                     axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
                     tickLine={false}
                     minTickGap={30}
                   />
-                  <YAxis tick={{ fill: '#64748B', fontSize: 10, fontFamily: 'ui-monospace, monospace' }} axisLine={false} tickLine={false} width={28} />
+                  <YAxis tick={{ fill: '#64748B', fontSize: 12, fontFamily: 'ui-monospace, monospace' }} axisLine={false} tickLine={false} width={32} />
                   <Tooltip
-                    contentStyle={{ background: '#0D111B', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 11 }}
-                    labelStyle={{ color: '#94A3B8', fontFamily: 'ui-monospace, monospace', marginBottom: 4 }}
+                    contentStyle={{ background: '#0D111B', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 13, padding: '10px 12px' }}
+                    labelStyle={{ color: '#94A3B8', fontFamily: 'ui-monospace, monospace', marginBottom: 6 }}
                     itemStyle={{ fontFamily: 'ui-monospace, monospace' }}
                     labelFormatter={(d) => (typeof d === 'string' ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : d)}
                   />
@@ -233,10 +233,10 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            <h2 className="text-[13px] font-semibold text-slate-200">Live System Telemetry</h2>
+        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-8">
+          <div className="flex items-center gap-2.5 mb-5">
+            <Radio className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-xl font-semibold text-slate-200">Live System Telemetry</h2>
           </div>
           <TelemetryPanel events={telemetry} />
         </div>

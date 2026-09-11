@@ -14,8 +14,8 @@ export function TrendBadge({ direction, label }: { direction: TrendDirection; la
   };
   const Icon = direction === 'up' ? ArrowUp : direction === 'down' ? ArrowDown : Minus;
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${styles[direction]}`}>
-      <Icon className="w-3 h-3" />
+    <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${styles[direction]}`}>
+      <Icon className="w-4 h-4" />
       {label}
     </span>
   );
@@ -38,22 +38,22 @@ const ACCENTS: Record<NonNullable<KPICardProps['accent']>, { text: string; bg: s
   sky: { text: 'text-sky-400', bg: 'bg-sky-500/10', line: '#38BDF8' },
 };
 
-/** Compact enterprise-console stat tile — label, number, trend, optional
- * inline sparkline. Deliberately short; density over decoration. */
+/** Enterprise-console stat tile — label, number, trend, optional inline
+ * sparkline, sized for comfortable reading rather than maximum density. */
 export function KPICard({ label, value, icon: Icon, accent = 'brand', trend, sparkline }: KPICardProps) {
   const a = ACCENTS[accent];
   return (
-    <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg px-4 py-3.5 flex flex-col gap-2 min-w-0">
+    <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 flex flex-col gap-3 min-w-0 min-h-[152px]">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</span>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${a.bg}`}>
-          <Icon className={`w-3.5 h-3.5 ${a.text}`} />
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${a.bg}`}>
+          <Icon className={`w-5 h-5 ${a.text}`} />
         </div>
       </div>
       <div className="flex items-end justify-between gap-3">
-        <span className="text-2xl font-semibold text-slate-50 font-mono tabular-nums leading-none">{value}</span>
+        <span className="text-4xl font-bold text-slate-50 font-mono tabular-nums leading-none">{value}</span>
         {sparkline && sparkline.length > 1 && (
-          <div className="w-16 h-6 flex-shrink-0">
+          <div className="w-20 h-9 flex-shrink-0">
             <Sparkline data={sparkline} color={a.line} />
           </div>
         )}

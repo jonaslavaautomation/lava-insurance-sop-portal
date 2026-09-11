@@ -23,18 +23,18 @@ function formatTime(iso: string) {
  * without exposing other users' identities. */
 export function TelemetryPanel({ events }: { events: TelemetryEvent[] }) {
   if (events.length === 0) {
-    return <p className="text-xs text-slate-600 text-center py-10">No recent activity yet.</p>;
+    return <p className="text-sm text-slate-600 text-center py-10">No recent activity yet.</p>;
   }
   return (
-    <div className="divide-y divide-white/[0.05]">
+    <div className="space-y-4">
       {events.map((e) => (
-        <div key={e.id} className="flex items-start gap-3 py-2.5">
-          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${TONE_DOT[e.tone]}`} aria-hidden="true" />
+        <div key={e.id} className="flex items-start gap-3">
+          <span className={`mt-2 w-2 h-2 rounded-full flex-shrink-0 ${TONE_DOT[e.tone]}`} aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-slate-300 leading-snug">
+            <p className="text-sm text-slate-300 leading-snug">
               {e.action} <span className="text-slate-500">&ldquo;{e.subject}&rdquo;</span>
             </p>
-            <p className="text-[10px] font-mono text-slate-600 mt-0.5">{formatTime(e.timestamp)}</p>
+            <p className="text-xs font-mono text-slate-600 mt-1">{formatTime(e.timestamp)}</p>
           </div>
         </div>
       ))}
