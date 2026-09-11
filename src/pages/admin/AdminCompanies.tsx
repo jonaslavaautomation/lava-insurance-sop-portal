@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Building2, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
 import { supabase, type InsuranceCompany } from '@/lib/supabase';
 import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
+import { CarrierLogo } from '@/components/CarrierLogo';
 
 export default function AdminCompanies() {
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
@@ -111,9 +112,7 @@ export default function AdminCompanies() {
             <div key={company.id} className="bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-white/[0.15] transition-colors group">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center">
-                    <Building2 className="w-4 h-4 text-brand-400" />
-                  </div>
+                  <CarrierLogo name={company.name} size={36} />
                   <div>
                     <p className="text-[13px] font-medium text-slate-100">{company.name}</p>
                     <p className="text-[11px] text-slate-500 font-mono">{new Date(company.created_at).toLocaleDateString()}</p>
