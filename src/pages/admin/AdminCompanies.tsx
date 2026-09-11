@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Building2, Plus, Trash2, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { Building2, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
 import { supabase, type InsuranceCompany } from '@/lib/supabase';
+import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 
 export default function AdminCompanies() {
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
@@ -59,15 +60,15 @@ export default function AdminCompanies() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Insurance Companies</h1>
-          <p className="text-slate-500 text-sm">Manage insurance companies in the knowledge base</p>
+          <h1 className="text-lg font-semibold text-slate-50 mb-0.5">Insurance Companies</h1>
+          <p className="text-slate-500 text-xs">Manage insurance companies in the knowledge base</p>
         </div>
         <button
           onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white text-[13px] font-medium px-3.5 py-2 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)]"
         >
           <Plus className="w-4 h-4" />
           Add Company
@@ -75,70 +76,58 @@ export default function AdminCompanies() {
       </div>
 
       {showAdd && (
-        <form onSubmit={handleAdd} className="mb-6 bg-white rounded-xl border border-slate-200 p-5">
-          <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
-          <div className="flex gap-3">
+        <form onSubmit={handleAdd} className="mb-5 bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4">
+          <label className="block text-xs font-medium text-slate-300 mb-2">Company Name</label>
+          <div className="flex gap-2.5">
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="e.g. Travelers"
               autoFocus
-              className="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+              className="flex-1 px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
             />
-            <button type="submit" disabled={submitting} className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2">
+            <button type="submit" disabled={submitting} className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Add
             </button>
-            <button type="button" onClick={() => setShowAdd(false)} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2.5">
+            <button type="button" onClick={() => setShowAdd(false)} className="text-sm text-slate-500 hover:text-slate-300 px-3 py-2.5">
               Cancel
             </button>
           </div>
-          {error && (
-            <div className="flex items-center gap-2 text-sm text-red-600 mt-3">
-              <AlertCircle className="w-4 h-4" /> {error}
-            </div>
-          )}
+          {error && <div className="mt-3"><ErrorState message={error} /></div>}
         </form>
       )}
 
-      {error && !showAdd && (
-        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 mb-4">
-          <AlertCircle className="w-4 h-4" /> {error}
-        </div>
-      )}
+      {error && !showAdd && <div className="mb-4"><ErrorState message={error} /></div>}
 
       {loading ? (
-        <div className="text-slate-400 text-sm animate-pulse">Loading...</div>
+        <LoadingState label="Loading companies..." />
       ) : companies.length === 0 ? (
-        <div className="text-center py-16">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-2xl mb-4">
-            <Building2 className="w-8 h-8 text-slate-400" />
-          </div>
-          <p className="text-slate-500 text-sm">No insurance companies yet. Click "Add Company" to get started.</p>
-        </div>
+        <EmptyState icon={Building2} title="No insurance companies yet" description={'Click "Add Company" to get started.'} />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {companies.map((company) => (
-            <div key={company.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow group">
+            <div key={company.id} className="bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-white/[0.15] transition-colors group">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center">
-                    <Building2 className="w-5 h-5 text-brand-600" />
+                  <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center">
+                    <Building2 className="w-4 h-4 text-brand-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{company.name}</p>
-                    <p className="text-xs text-slate-400">{new Date(company.created_at).toLocaleDateString()}</p>
+                    <p className="text-[13px] font-medium text-slate-100">{company.name}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">{new Date(company.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
                 <button
                   onClick={() => handleDelete(company.id, company.name)}
-                  className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                  className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  aria-label={`Delete ${company.name}`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+              <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
                 <FileText className="w-3.5 h-3.5" />
                 {docCounts[company.id] ?? 0} SOP document{(docCounts[company.id] ?? 0) !== 1 ? 's' : ''}
               </div>

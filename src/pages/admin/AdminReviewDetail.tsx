@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, AlertCircle, FileText, History } from 'lucide-react';
-import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany } from '@/lib/supabase';
+import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp } from 'lucide-react';
+import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement } from '@/lib/supabase';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
+import { ErrorState } from '@/components/admin/DataStates';
 
 export default function AdminReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export default function AdminReviewDetail() {
   const [content, setContent] = useState<SopContent | null>(null);
   const [company, setCompany] = useState<InsuranceCompany | null>(null);
   const [versions, setVersions] = useState<SopVersion[]>([]);
+  const [engagement, setEngagement] = useState<SopEngagement | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,9 @@ export default function AdminReviewDetail() {
 
         const { data: vers } = await supabase.from('sop_versions').select('*').eq('sop_document_id', id).order('created_at', { ascending: false });
         setVersions(vers ?? []);
+
+        const { data: eng } = await supabase.rpc('get_sop_engagement', { p_sop_ids: [id] });
+        setEngagement(((eng as SopEngagement[]) ?? [])[0] ?? null);
       }
 
       setLoading(false);
@@ -88,75 +93,83 @@ export default function AdminReviewDetail() {
     navigate('/admin/library');
   }
 
-  if (loading) return <div className="p-8 text-slate-400 text-sm animate-pulse">Loading...</div>;
+  if (loading) return <div className="p-6 text-slate-500 text-xs animate-pulse">Loading...</div>;
 
   if (!doc) {
     return (
-      <div className="p-8">
+      <div className="p-6">
         <p className="text-slate-500 text-sm">SOP document not found.</p>
-        <Link to="/admin/review" className="text-brand-600 text-sm mt-2 inline-block">Back to Pending Reviews</Link>
+        <Link to="/admin/review" className="text-brand-400 text-sm mt-2 inline-block">Back to Pending Reviews</Link>
       </div>
     );
   }
 
   const statusBadge = (status: string) => {
     const map: Record<string, string> = {
-      published: 'bg-green-50 text-green-700 border-green-200',
-      pending: 'bg-amber-50 text-amber-700 border-amber-200',
-      archived: 'bg-slate-100 text-slate-500 border-slate-200',
+      published: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      archived: 'bg-white/[0.04] text-slate-500 border-white/10',
     };
     const labels: Record<string, string> = { published: 'Published', pending: 'Pending Review', archived: 'Archived' };
-    return <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${map[status]}`}>{labels[status]}</span>;
+    return <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${map[status]}`}>{labels[status]}</span>;
   };
 
   return (
-    <div className="p-8 max-w-4xl">
-      <Link to="/admin/library" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back to Library
+    <div className="p-6 max-w-4xl">
+      <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+        <Link to="/admin/library" className="hover:text-slate-300 transition-colors">SOP Library</Link>
+        <span className="text-slate-700">/</span>
+        <span className="text-slate-500 truncate max-w-[240px]">{company?.name ?? '—'}</span>
+        <span className="text-slate-700">/</span>
+        <span className="text-slate-300 truncate max-w-[240px]">{doc.process_category}</span>
+      </div>
+
+      <Link to="/admin/library" className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 mb-4">
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to Library
       </Link>
 
-      {error && (
-        <div className="mb-4 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          <AlertCircle className="w-4 h-4" /> {error}
-        </div>
-      )}
+      {error && <div className="mb-4"><ErrorState message={error} /></div>}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="flex items-start justify-between mb-4">
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 mb-2">{doc.title}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+            <h1 className="text-lg font-semibold text-slate-50 mb-2">{doc.title}</h1>
+            <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500">
               <span>{company?.name ?? '—'}</span>
-              <span className="text-slate-300">|</span>
+              <span className="text-slate-700">|</span>
               <span>{doc.line_of_business}</span>
-              <span className="text-slate-300">|</span>
+              <span className="text-slate-700">|</span>
               <span>{doc.process_category}</span>
-              <span className="text-slate-300">|</span>
-              <span>v{doc.version}</span>
-              <span className="text-slate-300">|</span>
+              <span className="text-slate-700">|</span>
+              <span className="font-mono">v{doc.version}</span>
+              <span className="text-slate-700">|</span>
               {statusBadge(doc.status)}
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+              <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {engagement?.view_count ?? 0} Views</span>
+              <span className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5" /> {engagement?.like_count ?? 0} Likes</span>
             </div>
           </div>
         </div>
 
         {versions.length > 0 && (
-          <div className="mb-4">
+          <div className="mt-3 pt-3 border-t border-white/[0.06]">
             <button
               onClick={() => setShowVersions(!showVersions)}
-              className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
+              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200"
             >
-              <History className="w-4 h-4" />
+              <History className="w-3.5 h-3.5" />
               Version History ({versions.length})
             </button>
             {showVersions && (
-              <div className="mt-3 space-y-2 pl-6">
+              <div className="mt-2.5 space-y-1.5 pl-5.5">
                 {versions.map((v) => (
-                  <div key={v.id} className="flex items-center gap-3 text-sm">
-                    <span className="font-medium text-slate-700">v{v.version}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${v.status === 'published' ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <div key={v.id} className="flex items-center gap-3 text-xs">
+                    <span className="font-mono text-slate-300">v{v.version}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${v.status === 'published' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/[0.04] text-slate-500'}`}>
                       {v.status}
                     </span>
-                    <span className="text-xs text-slate-400">{new Date(v.created_at).toLocaleDateString()}</span>
+                    <span className="text-[10px] font-mono text-slate-600">{new Date(v.created_at).toLocaleDateString()}</span>
                   </div>
                 ))}
               </div>
@@ -165,26 +178,28 @@ export default function AdminReviewDetail() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-slate-400" /> SOP Content
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[13px] font-semibold text-slate-200 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-500" /> SOP Content
           </h2>
-          <span className="text-xs text-slate-400">
+          <span className="text-[11px] text-slate-500">
             {content?.content_type === 'steps' ? 'Step-by-step walkthrough (read-only preview)' : 'Review and edit before publishing'}
           </span>
         </div>
         {content?.content_type === 'steps' && content.steps ? (
-          <StepsViewer steps={content.steps} />
+          <div className="bg-white rounded-lg p-4">
+            <StepsViewer steps={content.steps} />
+          </div>
         ) : (
           <>
             <textarea
               value={editableContent}
               onChange={(e) => setEditableContent(e.target.value)}
               rows={16}
-              className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm font-mono resize-y"
+              className="w-full px-4 py-3 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm font-mono text-slate-100 resize-y"
             />
-            <div className="mt-4 border border-slate-200 rounded-lg p-4 bg-slate-50">
+            <div className="mt-4 border border-white/[0.08] rounded-lg p-4 bg-white">
               <p className="text-xs font-medium text-slate-500 mb-3">Preview — this is what VAs will see</p>
               <DocumentViewer content={editableContent} images={content?.images} />
             </div>
@@ -192,12 +207,12 @@ export default function AdminReviewDetail() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2.5">
         {doc.status !== 'published' && (
           <button
             onClick={() => updateStatus('published')}
             disabled={actionLoading}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50"
           >
             {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             Approve & Publish
@@ -207,7 +222,7 @@ export default function AdminReviewDetail() {
           <button
             onClick={() => updateStatus('archived')}
             disabled={actionLoading}
-            className="flex items-center gap-2 bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.1] text-slate-200 text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50"
           >
             {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
             Archive SOP
@@ -217,7 +232,7 @@ export default function AdminReviewDetail() {
           <button
             onClick={() => updateStatus('archived')}
             disabled={actionLoading}
-            className="flex items-center gap-2 bg-amber-100 hover:bg-amber-200 text-amber-700 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50"
           >
             <XCircle className="w-4 h-4" /> Reject
           </button>
@@ -225,7 +240,7 @@ export default function AdminReviewDetail() {
         <button
           onClick={handleDelete}
           disabled={actionLoading}
-          className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50 ml-auto"
+          className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 ml-auto"
         >
           <XCircle className="w-4 h-4" /> Delete
         </button>

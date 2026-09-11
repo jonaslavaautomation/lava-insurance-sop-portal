@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, ThumbsUp, FileText, Calendar, CheckCircle, Clock, Archive } from 'lucide-react';
+import { Eye, ThumbsUp, FileText, Calendar, CheckCircle, Clock, Archive, Search, Users, SearchX } from 'lucide-react';
 import { supabase, type SopEngagement } from '@/lib/supabase';
+import { KPICard } from '@/components/admin/KPICard';
+import { EmptyState } from '@/components/admin/DataStates';
 
 type DateRange = 'today' | '7d' | '30d' | 'month' | 'all';
 
@@ -12,32 +14,17 @@ const RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: 'all', label: 'All Time' },
 ];
 
-// Converts the selected range into a `since` timestamp for get_sop_engagement.
-// "All Time" passes null, i.e. no lower bound - every historical record.
+// Converts the selected range into a `since` timestamp. "All Time" passes
+// null, i.e. no lower bound - every historical record.
 function rangeToSince(range: DateRange): string | null {
   const now = new Date();
   switch (range) {
-    case 'today': {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      return d.toISOString();
-    }
-    case '7d': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 7);
-      return d.toISOString();
-    }
-    case '30d': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 30);
-      return d.toISOString();
-    }
-    case 'month': {
-      const d = new Date(now.getFullYear(), now.getMonth(), 1);
-      return d.toISOString();
-    }
+    case 'today': return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    case '7d': { const d = new Date(now); d.setDate(d.getDate() - 7); return d.toISOString(); }
+    case '30d': { const d = new Date(now); d.setDate(d.getDate() - 30); return d.toISOString(); }
+    case 'month': return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     case 'all':
-    default:
-      return null;
+    default: return null;
   }
 }
 
@@ -54,12 +41,21 @@ interface Row {
   last_liked_at: string | null;
 }
 
+interface SearchRow {
+  search_query: string;
+  result_count: number;
+  user_id: string;
+  created_at: string;
+}
+
 const TOP_N = 10;
 
 export default function AdminAnalytics() {
   const [range, setRange] = useState<DateRange>('all');
   const [rows, setRows] = useState<Row[]>([]);
   const [totalSops, setTotalSops] = useState(0);
+  const [searches, setSearches] = useState<SearchRow[]>([]);
+  const [activeVaCount, setActiveVaCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showAllViewed, setShowAllViewed] = useState(false);
   const [showAllLiked, setShowAllLiked] = useState(false);
@@ -68,18 +64,23 @@ export default function AdminAnalytics() {
     let cancelled = false;
     async function load() {
       setLoading(true);
+      const since = rangeToSince(range);
 
-      const [{ data: docs }, { data: companies }] = await Promise.all([
+      const [{ data: docs }, { data: companies }, { data: engagementData, error }] = await Promise.all([
         supabase.from('sop_documents').select('id, title, process_category, line_of_business, insurance_company_id, status'),
         supabase.from('insurance_companies').select('id, name'),
+        supabase.rpc('get_sop_engagement', { p_sop_ids: null, p_since: since }),
       ]);
-
-      const since = rangeToSince(range);
-      const { data: engagementData, error } = await supabase.rpc('get_sop_engagement', {
-        p_sop_ids: null,
-        p_since: since,
-      });
       if (error) console.error('Engagement fetch error:', error);
+
+      let searchQuery = supabase.from('sop_searches').select('search_query, result_count, user_id, created_at').order('created_at', { ascending: false });
+      if (since) searchQuery = searchQuery.gte('created_at', since);
+      const { data: searchRows, error: searchError } = await searchQuery.limit(1000);
+      if (searchError) console.error('Search log fetch error:', searchError);
+
+      let viewsQuery = supabase.from('sop_views').select('user_id');
+      if (since) viewsQuery = viewsQuery.gte('created_at', since);
+      const { data: viewRows } = await viewsQuery.limit(2000);
 
       if (cancelled) return;
 
@@ -105,8 +106,15 @@ export default function AdminAnalytics() {
         };
       });
 
+      const activeIds = new Set<string>([
+        ...(viewRows ?? []).map((r) => r.user_id),
+        ...(searchRows ?? []).map((r) => r.user_id),
+      ]);
+
       setRows(merged);
       setTotalSops((docs ?? []).length);
+      setSearches((searchRows as SearchRow[]) ?? []);
+      setActiveVaCount(activeIds.size);
       setLoading(false);
     }
     load();
@@ -119,15 +127,38 @@ export default function AdminAnalytics() {
   const mostViewed = useMemo(() => [...rows].sort((a, b) => b.view_count - a.view_count), [rows]);
   const mostLiked = useMemo(() => [...rows].sort((a, b) => b.like_count - a.like_count), [rows]);
 
+  const topSearchTerms = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of searches) {
+      const key = s.search_query.trim().toLowerCase();
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [searches]);
+
+  const zeroResultSearches = useMemo(() => {
+    const seen = new Set<string>();
+    const list: SearchRow[] = [];
+    for (const s of searches) {
+      const key = s.search_query.trim().toLowerCase();
+      if (s.result_count > 0 || !key || seen.has(key)) continue;
+      seen.add(key);
+      list.push(s);
+      if (list.length >= 8) break;
+    }
+    return list;
+  }, [searches]);
+
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; icon: typeof CheckCircle; class: string }> = {
-      published: { label: 'Published', icon: CheckCircle, class: 'bg-green-50 text-green-700 border-green-200' },
-      pending: { label: 'Pending Review', icon: Clock, class: 'bg-amber-50 text-amber-700 border-amber-200' },
-      archived: { label: 'Archived', icon: Archive, class: 'bg-slate-100 text-slate-500 border-slate-200' },
+      published: { label: 'Published', icon: CheckCircle, class: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+      pending: { label: 'Pending', icon: Clock, class: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+      archived: { label: 'Archived', icon: Archive, class: 'bg-white/[0.04] text-slate-500 border-white/10' },
     };
     const s = map[status] ?? map.pending;
     return (
-      <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${s.class}`}>
+      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${s.class}`}>
         <s.icon className="w-3 h-3" />
         {s.label}
       </span>
@@ -136,88 +167,56 @@ export default function AdminAnalytics() {
 
   const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : '—');
 
-  const cards = [
-    { label: 'Total SOPs', value: totalSops, icon: FileText, color: 'brand' },
-    { label: 'Total Views', value: totalViews, icon: Eye, color: 'green' },
-    { label: 'Total Likes', value: totalLikes, icon: ThumbsUp, color: 'amber' },
-  ];
-
-  const colorMap: Record<string, string> = {
-    brand: 'bg-brand-50 text-brand-600 border-brand-100',
-    green: 'bg-green-50 text-green-600 border-green-100',
-    amber: 'bg-amber-50 text-amber-600 border-amber-100',
-  };
-
   function EngagementTable({
-    title,
-    data,
-    showAll,
-    onToggleShowAll,
-    primaryLabel,
-    primaryKey,
-    secondaryLabel,
-    secondaryKey,
-    lastLabel,
-    lastKey,
+    title, data, showAll, onToggleShowAll, primaryLabel, primaryKey, secondaryLabel, secondaryKey, lastLabel, lastKey,
   }: {
-    title: string;
-    data: Row[];
-    showAll: boolean;
-    onToggleShowAll: () => void;
-    primaryLabel: string;
-    primaryKey: 'view_count' | 'like_count';
-    secondaryLabel: string;
-    secondaryKey: 'view_count' | 'like_count';
-    lastLabel: string;
-    lastKey: 'last_viewed_at' | 'last_liked_at';
+    title: string; data: Row[]; showAll: boolean; onToggleShowAll: () => void;
+    primaryLabel: string; primaryKey: 'view_count' | 'like_count';
+    secondaryLabel: string; secondaryKey: 'view_count' | 'like_count';
+    lastLabel: string; lastKey: 'last_viewed_at' | 'last_liked_at';
   }) {
     const visible = showAll ? data : data.slice(0, TOP_N);
     return (
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+      <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08]">
+          <h2 className="text-[13px] font-semibold text-slate-200">{title}</h2>
           {data.length > TOP_N && (
-            <button
-              onClick={onToggleShowAll}
-              className="text-sm text-brand-600 hover:text-brand-700 font-medium"
-            >
+            <button onClick={onToggleShowAll} className="text-xs text-brand-400 hover:text-brand-300 font-medium">
               {showAll ? 'Show top 10' : `Show all ${data.length}`}
             </button>
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-[13px]">
+            <thead className="bg-white/[0.02] border-b border-white/[0.08]">
               <tr>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3">Rank</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3">SOP / Process Name</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3 hidden md:table-cell">Insurance Company</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3 hidden md:table-cell">Category</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3">{primaryLabel}</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3 hidden sm:table-cell">{secondaryLabel}</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3 hidden lg:table-cell">{lastLabel}</th>
-                <th className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wider px-5 py-3">Status</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Rank</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">SOP / Process Name</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Carrier</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Category</th>
+                <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">{primaryLabel}</th>
+                <th className="text-right text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden sm:table-cell">{secondaryLabel}</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">{lastLabel}</th>
+                <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-white/[0.05]">
               {visible.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-5 py-8 text-center text-sm text-slate-400">No engagement data yet</td>
-                </tr>
+                <tr><td colSpan={8}><EmptyState title="No engagement data available yet." /></td></tr>
               ) : (
                 visible.map((row, idx) => (
-                  <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3.5 text-sm text-slate-500">{idx + 1}</td>
-                    <td className="px-5 py-3.5">
-                      <p className="text-sm font-medium text-slate-900">{row.title}</p>
-                      <p className="text-xs text-slate-400">{row.line_of_business}</p>
+                  <tr key={row.id} className="hover:bg-white/[0.03] transition-colors">
+                    <td className="px-4 py-2.5 text-slate-500 font-mono">{idx + 1}</td>
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium text-slate-100 truncate max-w-[220px]">{row.title}</p>
+                      <p className="text-[11px] text-slate-500">{row.line_of_business}</p>
                     </td>
-                    <td className="px-5 py-3.5 text-sm text-slate-600 hidden md:table-cell">{row.company_name}</td>
-                    <td className="px-5 py-3.5 text-sm text-slate-600 hidden md:table-cell">{row.process_category}</td>
-                    <td className="px-5 py-3.5 text-sm font-semibold text-slate-900">{row[primaryKey]}</td>
-                    <td className="px-5 py-3.5 text-sm text-slate-600 hidden sm:table-cell">{row[secondaryKey]}</td>
-                    <td className="px-5 py-3.5 text-sm text-slate-500 hidden lg:table-cell">{formatDate(row[lastKey])}</td>
-                    <td className="px-5 py-3.5">{statusBadge(row.status)}</td>
+                    <td className="px-4 py-2.5 text-slate-400 hidden md:table-cell">{row.company_name}</td>
+                    <td className="px-4 py-2.5 text-slate-400 hidden md:table-cell">{row.process_category}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-100">{row[primaryKey]}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-slate-400 hidden sm:table-cell">{row[secondaryKey]}</td>
+                    <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px] hidden lg:table-cell">{formatDate(row[lastKey])}</td>
+                    <td className="px-4 py-2.5">{statusBadge(row.status)}</td>
                   </tr>
                 ))
               )}
@@ -229,63 +228,85 @@ export default function AdminAnalytics() {
   }
 
   if (loading) {
-    return <div className="p-8 text-slate-400 text-sm animate-pulse">Loading analytics...</div>;
+    return <div className="p-6 text-slate-500 text-xs animate-pulse">Loading analytics...</div>;
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">SOP Analytics</h1>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-0.5 flex-wrap gap-3">
+        <h1 className="text-lg font-semibold text-slate-50">SOP Analytics</h1>
         <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-slate-400" />
+          <Calendar className="w-3.5 h-3.5 text-slate-500" />
           <select
             value={range}
             onChange={(e) => setRange(e.target.value as DateRange)}
-            className="px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
+            className="px-2.5 py-1.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-xs text-slate-200"
           >
-            {RANGE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            {RANGE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value} className="bg-ink-secondary">{opt.label}</option>)}
           </select>
         </div>
       </div>
-      <p className="text-slate-500 text-sm mb-8">SOP engagement: views and likes across the knowledge base</p>
+      <p className="text-slate-500 text-xs mb-5">SOP engagement: views, likes, and searches across the knowledge base</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        {cards.map((card) => (
-          <div key={card.label} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow">
-            <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg border mb-3 ${colorMap[card.color]}`}>
-              <card.icon className="w-5 h-5" />
-            </div>
-            <p className="text-2xl font-bold text-slate-900">{card.value}</p>
-            <p className="text-xs text-slate-500 mt-1">{card.label}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+        <KPICard label="Total SOPs" value={totalSops} icon={FileText} accent="brand" />
+        <KPICard label="Total Views" value={totalViews} icon={Eye} accent="sky" />
+        <KPICard label="Total Likes" value={totalLikes} icon={ThumbsUp} accent="emerald" />
+        <KPICard label="Total Searches" value={searches.length} icon={Search} accent="cyan" />
+        <KPICard label="Active VAs" value={activeVaCount} icon={Users} accent="amber" />
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         <EngagementTable
-          title="Most Viewed SOPs"
-          data={mostViewed}
-          showAll={showAllViewed}
-          onToggleShowAll={() => setShowAllViewed((v) => !v)}
-          primaryLabel="Views"
-          primaryKey="view_count"
-          secondaryLabel="Likes"
-          secondaryKey="like_count"
-          lastLabel="Last Viewed"
-          lastKey="last_viewed_at"
+          title="Most Viewed SOPs" data={mostViewed} showAll={showAllViewed} onToggleShowAll={() => setShowAllViewed((v) => !v)}
+          primaryLabel="Views" primaryKey="view_count" secondaryLabel="Likes" secondaryKey="like_count"
+          lastLabel="Last Viewed" lastKey="last_viewed_at"
         />
         <EngagementTable
-          title="Most Liked SOPs"
-          data={mostLiked}
-          showAll={showAllLiked}
-          onToggleShowAll={() => setShowAllLiked((v) => !v)}
-          primaryLabel="Likes"
-          primaryKey="like_count"
-          secondaryLabel="Views"
-          secondaryKey="view_count"
-          lastLabel="Last Liked"
-          lastKey="last_liked_at"
+          title="Most Liked SOPs" data={mostLiked} showAll={showAllLiked} onToggleShowAll={() => setShowAllLiked((v) => !v)}
+          primaryLabel="Likes" primaryKey="like_count" secondaryLabel="Views" secondaryKey="view_count"
+          lastLabel="Last Liked" lastKey="last_liked_at"
         />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Search className="w-3.5 h-3.5 text-cyan-400" />
+              <h2 className="text-[13px] font-semibold text-slate-200">Top Search Terms</h2>
+            </div>
+            {topSearchTerms.length === 0 ? (
+              <EmptyState title="No searches logged yet." />
+            ) : (
+              <div className="space-y-2">
+                {topSearchTerms.map(([term, count], i) => (
+                  <div key={term} className="flex items-center justify-between text-[13px]">
+                    <span className="text-slate-300 truncate"><span className="text-slate-600 font-mono mr-2">{String(i + 1).padStart(2, '0')}</span>{term}</span>
+                    <span className="font-mono text-slate-500 flex-shrink-0">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <SearchX className="w-3.5 h-3.5 text-red-400" />
+              <h2 className="text-[13px] font-semibold text-slate-200">Searches With No Results</h2>
+            </div>
+            {zeroResultSearches.length === 0 ? (
+              <EmptyState title="No zero-result searches - nice." />
+            ) : (
+              <div className="space-y-2">
+                {zeroResultSearches.map((s) => (
+                  <div key={`${s.search_query}-${s.created_at}`} className="flex items-center justify-between text-[13px]">
+                    <span className="text-slate-300 truncate">{s.search_query}</span>
+                    <span className="font-mono text-[11px] text-slate-600 flex-shrink-0">{formatDate(s.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

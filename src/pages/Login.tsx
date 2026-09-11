@@ -54,36 +54,36 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-brand-50 to-slate-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-ink px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <LavaLogo className="w-16 h-16 rounded-2xl mb-4 mx-auto shadow-lg shadow-black/20" />
-          <h1 className="text-2xl font-bold text-slate-900">LAVA Automation</h1>
-          <p className="text-slate-500 mt-1">Insurance SOP Search Portal</p>
+          <LavaLogo className="w-16 h-16 rounded-2xl mb-4 mx-auto shadow-lg shadow-black/40" />
+          <h1 className="text-2xl font-bold text-slate-50">LAVA Automation</h1>
+          <p className="text-slate-500 mt-1 text-sm">Insurance SOP Search Portal</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
+        <div className="bg-[#121723]/80 rounded-2xl border border-white/[0.08] p-8">
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={googleLoading || loading}
-            className="w-full flex items-center justify-center gap-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mb-6"
+            className="w-full flex items-center justify-center gap-2.5 border border-white/10 hover:bg-white/[0.04] text-slate-200 font-medium py-2.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm mb-6"
           >
             {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon className="w-4 h-4" />}
             Continue with Google
           </button>
 
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs text-slate-400">or</span>
-            <div className="flex-1 h-px bg-slate-200" />
+            <div className="flex-1 h-px bg-white/[0.08]" />
+            <span className="text-xs text-slate-600">or</span>
+            <div className="flex-1 h-px bg-white/[0.08]" />
           </div>
 
-          <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-xl">
+          <div className="flex gap-2 mb-6 p-1 bg-white/[0.04] rounded-xl">
             <button
               onClick={() => { setMode('login'); setError(null); }}
               className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-                mode === 'login' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                mode === 'login' ? 'bg-white/[0.08] text-slate-50' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
               Sign In
@@ -91,7 +91,7 @@ export default function Login() {
             <button
               onClick={() => { setMode('signup'); setError(null); }}
               className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-                mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                mode === 'signup' ? 'bg-white/[0.08] text-slate-50' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
               Create Account
@@ -101,45 +101,45 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">Full Name</label>
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm"
+                  className="w-full px-4 py-2.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm text-slate-100"
                   placeholder="Jane Doe"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1.5">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm"
+                className="w-full px-4 py-2.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm text-slate-100"
                 placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm"
+                className="w-full px-4 py-2.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all text-sm text-slate-100"
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+              <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
@@ -148,7 +148,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium py-2.5 rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+              className="w-full bg-brand-600 hover:bg-brand-500 text-white font-medium py-2.5 rounded-lg transition-all shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2 text-sm"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {mode === 'login' ? 'Sign In' : 'Create Account'}
@@ -156,7 +156,7 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-400 mt-6">
+        <p className="text-center text-xs text-slate-600 mt-6">
           VAs and students: sign in with your Google account to search approved SOPs.
         </p>
       </div>

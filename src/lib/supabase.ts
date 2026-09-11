@@ -135,3 +135,20 @@ export interface SopEngagement {
   last_viewed_at: string | null;
   last_liked_at: string | null;
 }
+
+/** One search a VA ran in the portal. Append-only - never edited. */
+export interface SopSearch {
+  id: string;
+  user_id: string;
+  insurance_company_id: string | null;
+  search_query: string;
+  result_count: number;
+  created_at: string;
+}
+
+/** One day's view/like totals, for the admin engagement trend chart. */
+export interface EngagementDailyPoint {
+  day: string;
+  view_count: number;
+  like_count: number;
+}

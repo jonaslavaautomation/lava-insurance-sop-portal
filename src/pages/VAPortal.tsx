@@ -38,20 +38,35 @@ export default function VAPortal() {
     setHasSearched(true);
     setSelectedResult(null);
 
+    const query = searchQuery.trim();
     const { data, error } = await supabase.rpc('search_sops', {
       p_company_id: selectedCompany,
-      p_query: searchQuery.trim(),
+      p_query: query,
     });
 
+    let rows: SearchResult[] = [];
     if (error) {
       console.error('Search error:', error);
       setResults([]);
     } else {
-      const rows = (data as SearchResult[]) ?? [];
+      rows = (data as SearchResult[]) ?? [];
       setResults(rows);
       void loadEngagement(rows.map((r) => r.document_id));
     }
     setSearching(false);
+
+    // Logs the real search so the Training Department can eventually see
+    // which processes are searched for most, and which searches come up
+    // empty — never surfaced anywhere as a fabricated number.
+    if (profile) {
+      const { error: logError } = await supabase.from('sop_searches').insert({
+        user_id: profile.id,
+        insurance_company_id: selectedCompany,
+        search_query: query,
+        result_count: rows.length,
+      });
+      if (logError) console.error('Search logging error:', logError);
+    }
   }
 
   // Fetches (or refreshes) view/like counts for a set of SOPs in one batched
@@ -129,24 +144,24 @@ export default function VAPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-ink text-slate-200">
+      <header className="bg-ink-secondary/80 backdrop-blur-sm border-b border-white/[0.06] sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <LavaLogo className="w-10 h-10 rounded-xl" />
+            <LavaLogo className="w-9 h-9 rounded-lg" />
             <div>
-              <h1 className="text-base font-bold text-slate-900">Insurance SOP Search Portal</h1>
-              <p className="text-xs text-slate-400">LAVA Automation</p>
+              <h1 className="text-sm font-semibold text-slate-50">Insurance SOP Search Portal</h1>
+              <p className="text-[11px] text-slate-500">LAVA Automation</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-medium text-slate-600 truncate max-w-[180px]">{profile?.email}</p>
-              <p className="text-[11px] text-slate-400">VA / Student Portal</p>
+              <p className="text-xs font-medium text-slate-300 truncate max-w-[180px]">{profile?.email}</p>
+              <p className="text-[10px] text-slate-500">VA / Student Portal</p>
             </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-100 px-3 py-2 rounded-md hover:bg-white/[0.06] transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
               Sign Out
@@ -156,53 +171,53 @@ export default function VAPortal() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 bg-brand-50 rounded-lg flex items-center justify-center">
-              <Building2 className="w-4.5 h-4.5 text-brand-600" />
+        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 bg-sky-500/10 rounded-md flex items-center justify-center">
+              <Building2 className="w-4 h-4 text-sky-400" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-900">Select Insurance Company</label>
-              <p className="text-xs text-slate-400">Choose the company to search within</p>
+              <label className="block text-[13px] font-semibold text-slate-100">Select Insurance Company</label>
+              <p className="text-xs text-slate-500">Choose the company to search within</p>
             </div>
           </div>
           <select
             value={selectedCompany}
             onChange={(e) => { setSelectedCompany(e.target.value); setHasSearched(false); setResults([]); }}
             disabled={loading}
-            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
+            className="w-full px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
           >
-            <option value="">{loading ? 'Loading...' : 'Select an insurance company...'}</option>
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="" className="bg-ink-secondary">{loading ? 'Loading...' : 'Select an insurance company...'}</option>
+            {companies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
           </select>
         </div>
 
         {selectedCompany && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
-                <Search className="w-4.5 h-4.5 text-green-600" />
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 bg-emerald-500/10 rounded-md flex items-center justify-center">
+                <Search className="w-4 h-4 text-emerald-400" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-900">Search Process / Workflow</label>
-                <p className="text-xs text-slate-400">Search within {companies.find((c) => c.id === selectedCompany)?.name} approved SOPs</p>
+                <label className="block text-[13px] font-semibold text-slate-100">Search Process / Workflow</label>
+                <p className="text-xs text-slate-500">Search within {companies.find((c) => c.id === selectedCompany)?.name} approved SOPs</p>
               </div>
             </div>
             <form onSubmit={handleSearch} className="flex gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="e.g. Cancellation, Claims, Underwriting..."
-                  className="w-full pl-9 pr-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600"
                 />
               </div>
               <button
                 type="submit"
                 disabled={searching || !searchQuery.trim()}
-                className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-6 py-3 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 py-2.5 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
               >
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 Search
@@ -213,19 +228,19 @@ export default function VAPortal() {
 
         {searching && (
           <div className="text-center py-12">
-            <Loader2 className="w-6 h-6 text-brand-500 animate-spin mx-auto mb-3" />
-            <p className="text-sm text-slate-400">Searching approved SOPs...</p>
+            <Loader2 className="w-5 h-5 text-brand-500 animate-spin mx-auto mb-3" />
+            <p className="text-sm text-slate-500">Searching approved SOPs...</p>
           </div>
         )}
 
         {!searching && hasSearched && results.length === 0 && !selectedResult && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-100 rounded-2xl mb-4">
-              <Info className="w-7 h-7 text-slate-400" />
+          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-12 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-white/[0.04] rounded-lg mb-4">
+              <Info className="w-6 h-6 text-slate-500" />
             </div>
-            <h3 className="text-base font-semibold text-slate-900 mb-2">No information was found</h3>
+            <h3 className="text-sm font-semibold text-slate-100 mb-2">No information was found</h3>
             <p className="text-sm text-slate-500 max-w-md mx-auto">
-              No information was found in the available SOP documents for "{searchQuery}".
+              No information was found in the available SOP documents for &ldquo;{searchQuery}&rdquo;.
               The system does not generate alternative processes. Please try a different search term.
             </p>
           </div>
@@ -233,40 +248,40 @@ export default function VAPortal() {
 
         {!searching && hasSearched && results.length > 0 && !selectedResult && (
           <div>
-            <p className="text-sm text-slate-500 mb-4">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
-            <div className="space-y-3">
+            <p className="text-xs text-slate-500 mb-3">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
+            <div className="space-y-2.5">
               {results.map((result) => (
                 <button
                   key={result.document_id}
                   onClick={() => openResult(result)}
-                  className="w-full text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-brand-300 transition-all group"
+                  className="w-full text-left bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-brand-600" />
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-4 h-4 text-brand-400" />
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{result.title}</p>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-xs text-slate-500">{result.process_category}</span>
-                          <span className="text-xs text-slate-300">|</span>
-                          <span className="text-xs text-slate-500">{result.line_of_business}</span>
-                          <span className="text-xs text-slate-300">|</span>
-                          <span className="text-xs text-slate-500">v{result.version}</span>
-                          <span className="text-xs text-slate-300">|</span>
-                          <span className="text-xs text-slate-500 flex items-center gap-1">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-slate-100 truncate">{result.title}</p>
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
+                          <span className="text-[11px] text-slate-500">{result.process_category}</span>
+                          <span className="text-[11px] text-slate-700">|</span>
+                          <span className="text-[11px] text-slate-500">{result.line_of_business}</span>
+                          <span className="text-[11px] text-slate-700">|</span>
+                          <span className="text-[11px] font-mono text-slate-500">v{result.version}</span>
+                          <span className="text-[11px] text-slate-700">|</span>
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
                             <Eye className="w-3 h-3" /> {engagement[result.document_id]?.view_count ?? 0}
                           </span>
-                          <span className="text-xs text-slate-500 flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
                             <ThumbsUp className="w-3 h-3" /> {engagement[result.document_id]?.like_count ?? 0}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-brand-600 text-sm font-medium">
+                    <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium flex-shrink-0">
                       View SOP
-                      <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
                 </button>
@@ -276,11 +291,11 @@ export default function VAPortal() {
         )}
 
         {!searching && !hasSearched && selectedCompany && (
-          <div className="bg-brand-50 border border-brand-100 rounded-xl p-5 flex items-start gap-3">
-            <Info className="w-5 h-5 text-brand-500 flex-shrink-0 mt-0.5" />
+          <div className="bg-brand-500/[0.06] border border-brand-500/20 rounded-lg p-4 flex items-start gap-3">
+            <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm text-brand-900 font-medium">Ready to search</p>
-              <p className="text-xs text-brand-700 mt-1">
+              <p className="text-sm text-slate-200 font-medium">Ready to search</p>
+              <p className="text-xs text-slate-400 mt-1">
                 Enter a process or workflow term above to search within the approved SOP documents for {companies.find((c) => c.id === selectedCompany)?.name}.
                 Only published SOPs are included in search results.
               </p>
@@ -290,8 +305,8 @@ export default function VAPortal() {
 
         {!searching && !hasSearched && !selectedCompany && !loading && (
           <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-2xl mb-4">
-              <Building2 className="w-8 h-8 text-slate-400" />
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-white/[0.04] rounded-lg mb-4">
+              <Building2 className="w-7 h-7 text-slate-600" />
             </div>
             <p className="text-slate-500 text-sm">Select an insurance company above to begin searching.</p>
           </div>
@@ -299,25 +314,25 @@ export default function VAPortal() {
       </main>
 
       {selectedResult && (
-        <div className="fixed inset-0 bg-black/40 z-20 flex items-center justify-center p-4" onClick={() => setSelectedResult(null)}>
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 z-20 flex items-center justify-center p-4" onClick={() => setSelectedResult(null)}>
+          <div className="bg-ink-secondary border border-white/10 rounded-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">{selectedResult.title}</h2>
-                <div className="flex items-center gap-3 mt-1">
+                <h2 className="text-base font-semibold text-slate-50">{selectedResult.title}</h2>
+                <div className="flex items-center gap-2.5 mt-1">
                   <span className="text-xs text-slate-500">{selectedResult.insurance_company_name}</span>
-                  <span className="text-xs text-slate-300">|</span>
+                  <span className="text-xs text-slate-700">|</span>
                   <span className="text-xs text-slate-500">{selectedResult.process_category}</span>
-                  <span className="text-xs text-slate-300">|</span>
+                  <span className="text-xs text-slate-700">|</span>
                   <span className="text-xs text-slate-500">{selectedResult.line_of_business}</span>
-                  <span className="text-xs text-slate-300">|</span>
-                  <span className="text-xs text-slate-500">v{selectedResult.version}</span>
+                  <span className="text-xs text-slate-700">|</span>
+                  <span className="text-xs font-mono text-slate-500">v{selectedResult.version}</span>
                 </div>
-                <div className="flex items-center gap-4 mt-2">
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                <div className="flex items-center gap-4 mt-2.5">
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Eye className="w-3.5 h-3.5" /> {engagement[selectedResult.document_id]?.view_count ?? 0} Views
                   </span>
-                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
                     <ThumbsUp className="w-3.5 h-3.5" /> {engagement[selectedResult.document_id]?.like_count ?? 0} Likes
                   </span>
                   <button
@@ -326,7 +341,7 @@ export default function VAPortal() {
                     className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-60 ${
                       liked
                         ? 'bg-brand-600 border-brand-600 text-white'
-                        : 'bg-white border-slate-300 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+                        : 'bg-white/[0.03] border-white/10 text-slate-400 hover:border-brand-500/40 hover:text-brand-400'
                     }`}
                   >
                     <ThumbsUp className="w-3.5 h-3.5" />
@@ -334,11 +349,11 @@ export default function VAPortal() {
                   </button>
                 </div>
               </div>
-              <button onClick={() => setSelectedResult(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">
+              <button onClick={() => setSelectedResult(null)} className="text-slate-500 hover:text-slate-200 p-1 rounded-md hover:bg-white/[0.06] transition-colors flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="px-6 py-5 overflow-y-auto">
+            <div className="px-6 py-5 overflow-y-auto bg-white rounded-b-xl">
               {selectedResult.content_type === 'steps' && selectedResult.steps ? (
                 <StepsViewer steps={selectedResult.steps} />
               ) : (

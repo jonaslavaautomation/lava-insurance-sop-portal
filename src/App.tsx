@@ -14,7 +14,7 @@ import VAPortal from '@/pages/VAPortal';
 
 function RootRedirect() {
   const { session, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm animate-pulse">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-ink flex items-center justify-center text-slate-500 text-sm animate-pulse">Loading...</div>;
   if (!session) return <Navigate to="/login" replace />;
   return <Navigate to="/admin" replace />;
 }

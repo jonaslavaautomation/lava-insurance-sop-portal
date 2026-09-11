@@ -431,6 +431,73 @@ AS $$
 $$;
 
 -- ============================================================
+-- SOP SEARCHES TABLE
+-- ============================================================
+-- Append-only log of what VAs actually search for. Backs a real
+-- "Total Searches" count and a "searches with no results" list - never
+-- fabricated numbers.
+CREATE TABLE IF NOT EXISTS sop_searches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  insurance_company_id uuid REFERENCES insurance_companies(id) ON DELETE SET NULL,
+  search_query text NOT NULL,
+  result_count int NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sop_searches ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sop_searches_select" ON sop_searches;
+CREATE POLICY "sop_searches_select" ON sop_searches
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR is_admin());
+
+DROP POLICY IF EXISTS "sop_searches_insert_own" ON sop_searches;
+CREATE POLICY "sop_searches_insert_own" ON sop_searches
+  FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_sop_searches_user ON sop_searches(user_id);
+CREATE INDEX IF NOT EXISTS idx_sop_searches_company ON sop_searches(insurance_company_id);
+CREATE INDEX IF NOT EXISTS idx_sop_searches_created ON sop_searches(created_at);
+
+-- ============================================================
+-- DAILY ENGAGEMENT AGGREGATE (admin analytics trend chart)
+-- ============================================================
+-- One row per day (including zero-activity days) for the last p_days
+-- days, computed fresh from sop_views/sop_likes every call. Admin-only -
+-- returns nothing for a non-admin caller.
+DROP FUNCTION IF EXISTS get_engagement_daily(int);
+CREATE FUNCTION get_engagement_daily(p_days int DEFAULT 30)
+RETURNS TABLE (
+  day date,
+  view_count bigint,
+  like_count bigint
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    gs.day::date,
+    COALESCE(v.c, 0) AS view_count,
+    COALESCE(l.c, 0) AS like_count
+  FROM generate_series(
+    current_date - (GREATEST(p_days, 1) - 1),
+    current_date,
+    interval '1 day'
+  ) AS gs(day)
+  LEFT JOIN (
+    SELECT created_at::date AS d, COUNT(*) AS c FROM sop_views GROUP BY d
+  ) v ON v.d = gs.day::date
+  LEFT JOIN (
+    SELECT created_at::date AS d, COUNT(*) AS c FROM sop_likes GROUP BY d
+  ) l ON l.d = gs.day::date
+  WHERE is_admin()
+  ORDER BY gs.day;
+$$;
+
+-- ============================================================
 -- Force PostgREST to pick up the schema immediately.
 -- Fixes "Could not find the table 'public.<table>' in the schema
 -- cache" if it ever shows up right after running migrations.
