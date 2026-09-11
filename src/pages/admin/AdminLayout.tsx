@@ -92,7 +92,7 @@ export default function AdminLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 px-2.5 py-3 space-y-0.5">
+        <nav className="px-2.5 py-3 space-y-0.5">
           {navItems.map((item) => {
             const count = item.countKey ? counts[item.countKey] : null;
             return (
