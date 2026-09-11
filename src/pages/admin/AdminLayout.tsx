@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Library, Upload, FileCheck, LogOut, ExternalLink,
+  LayoutDashboard, Building2, Library, FileCheck, LogOut, ExternalLink,
   BarChart3, Search, Settings, PanelLeft, Plus, Clock, ChevronDown, ChevronRight, User,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -13,7 +13,6 @@ const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, countKey: null },
   { to: '/admin/companies', label: 'Insurance Companies', icon: Building2, end: false, countKey: 'companies' as const },
   { to: '/admin/library', label: 'SOP Library', icon: Library, end: false, countKey: 'documents' as const },
-  { to: '/admin/upload', label: 'Upload SOP', icon: Upload, end: false, countKey: null },
   { to: '/admin/review', label: 'Pending Reviews', icon: FileCheck, end: false, countKey: 'pending' as const, alert: true },
   { to: '/admin/analytics', label: 'SOP Analytics', icon: BarChart3, end: false, countKey: null },
 ];
@@ -341,14 +340,6 @@ export default function AdminLayout() {
             <span className={`w-2 h-2 rounded-full ${systemOk === false ? 'bg-red-400' : 'bg-emerald-400'}`} />
             {systemOk === false ? 'Degraded' : 'Operational'}
           </div>
-
-          <button
-            onClick={() => navigate('/admin/upload')}
-            className="flex-shrink-0 h-11 flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 rounded-lg transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)]"
-          >
-            <Upload className="w-4 h-4" />
-            Upload SOP
-          </button>
         </header>
 
         <div className="flex-1 overflow-auto">
