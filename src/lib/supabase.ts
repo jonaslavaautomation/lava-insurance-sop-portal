@@ -110,3 +110,28 @@ export interface SearchResult {
   images: SopImage[] | null;
   insurance_company_name: string;
 }
+
+/** One "a VA opened this SOP" event. Append-only - never edited. */
+export interface SopView {
+  id: string;
+  sop_document_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+/** One VA's like on one SOP. Unique per (sop_document_id, user_id). */
+export interface SopLike {
+  id: string;
+  sop_document_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+/** Aggregate view/like counts for one SOP, always computed from the log tables. */
+export interface SopEngagement {
+  sop_document_id: string;
+  view_count: number;
+  like_count: number;
+  last_viewed_at: string | null;
+  last_liked_at: string | null;
+}

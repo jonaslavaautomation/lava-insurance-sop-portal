@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, Library, Upload, FileCheck, LogOut, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Building2, Library, Upload, FileCheck, LogOut, ExternalLink, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { LavaLogo } from '@/components/LavaLogo';
 
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/admin/library', label: 'SOP Library', icon: Library },
   { to: '/admin/upload', label: 'Upload SOP', icon: Upload },
   { to: '/admin/review', label: 'Pending Reviews', icon: FileCheck },
+  { to: '/admin/analytics', label: 'SOP Analytics', icon: BarChart3 },
 ];
 
 export default function AdminLayout() {

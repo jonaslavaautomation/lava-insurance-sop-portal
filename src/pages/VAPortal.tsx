@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Building2, FileText, ChevronRight, Loader2, Info, X, LogOut } from 'lucide-react';
-import { supabase, type InsuranceCompany, type SearchResult } from '@/lib/supabase';
+import { Search, Building2, FileText, ChevronRight, Loader2, Info, X, LogOut, Eye, ThumbsUp } from 'lucide-react';
+import { supabase, type InsuranceCompany, type SearchResult, type SopEngagement } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
@@ -18,6 +18,9 @@ export default function VAPortal() {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [engagement, setEngagement] = useState<Record<string, SopEngagement>>({});
+  const [liked, setLiked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -44,9 +47,80 @@ export default function VAPortal() {
       console.error('Search error:', error);
       setResults([]);
     } else {
-      setResults((data as SearchResult[]) ?? []);
+      const rows = (data as SearchResult[]) ?? [];
+      setResults(rows);
+      void loadEngagement(rows.map((r) => r.document_id));
     }
     setSearching(false);
+  }
+
+  // Fetches (or refreshes) view/like counts for a set of SOPs in one batched
+  // call. Counts are always computed fresh from sop_views/sop_likes - never
+  // a stored counter - so this can be called as often as needed.
+  async function loadEngagement(documentIds: string[]) {
+    if (documentIds.length === 0) return;
+    const { data, error } = await supabase.rpc('get_sop_engagement', { p_sop_ids: documentIds });
+    if (error) {
+      console.error('Engagement fetch error:', error);
+      return;
+    }
+    setEngagement((prev) => {
+      const next = { ...prev };
+      for (const row of (data as SopEngagement[]) ?? []) next[row.sop_document_id] = row;
+      return next;
+    });
+  }
+
+  // Records a view the moment a VA actually opens an SOP's detail content -
+  // never on search results merely rendering, and never for admins browsing
+  // the portal (they can also reach /portal via the "VA Portal" link).
+  async function openResult(result: SearchResult) {
+    setSelectedResult(result);
+    setLiked(false);
+
+    if (profile && profile.role !== 'admin') {
+      const { error } = await supabase
+        .from('sop_views')
+        .insert({ sop_document_id: result.document_id, user_id: profile.id });
+      if (error) console.error('View tracking error:', error);
+    }
+
+    if (profile) {
+      const { data: likeRow } = await supabase
+        .from('sop_likes')
+        .select('id')
+        .eq('sop_document_id', result.document_id)
+        .eq('user_id', profile.id)
+        .maybeSingle();
+      setLiked(!!likeRow);
+    }
+
+    void loadEngagement([result.document_id]);
+  }
+
+  async function toggleLike() {
+    if (!selectedResult || !profile || likeBusy) return;
+    setLikeBusy(true);
+    const documentId = selectedResult.document_id;
+
+    if (liked) {
+      const { error } = await supabase
+        .from('sop_likes')
+        .delete()
+        .eq('sop_document_id', documentId)
+        .eq('user_id', profile.id);
+      if (!error) setLiked(false);
+      else console.error('Unlike error:', error);
+    } else {
+      const { error } = await supabase
+        .from('sop_likes')
+        .insert({ sop_document_id: documentId, user_id: profile.id });
+      if (!error) setLiked(true);
+      else console.error('Like error:', error);
+    }
+
+    await loadEngagement([documentId]);
+    setLikeBusy(false);
   }
 
   async function handleSignOut() {
@@ -164,7 +238,7 @@ export default function VAPortal() {
               {results.map((result) => (
                 <button
                   key={result.document_id}
-                  onClick={() => setSelectedResult(result)}
+                  onClick={() => openResult(result)}
                   className="w-full text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-brand-300 transition-all group"
                 >
                   <div className="flex items-center justify-between">
@@ -180,6 +254,13 @@ export default function VAPortal() {
                           <span className="text-xs text-slate-500">{result.line_of_business}</span>
                           <span className="text-xs text-slate-300">|</span>
                           <span className="text-xs text-slate-500">v{result.version}</span>
+                          <span className="text-xs text-slate-300">|</span>
+                          <span className="text-xs text-slate-500 flex items-center gap-1">
+                            <Eye className="w-3 h-3" /> {engagement[result.document_id]?.view_count ?? 0}
+                          </span>
+                          <span className="text-xs text-slate-500 flex items-center gap-1">
+                            <ThumbsUp className="w-3 h-3" /> {engagement[result.document_id]?.like_count ?? 0}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -231,6 +312,26 @@ export default function VAPortal() {
                   <span className="text-xs text-slate-500">{selectedResult.line_of_business}</span>
                   <span className="text-xs text-slate-300">|</span>
                   <span className="text-xs text-slate-500">v{selectedResult.version}</span>
+                </div>
+                <div className="flex items-center gap-4 mt-2">
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5" /> {engagement[selectedResult.document_id]?.view_count ?? 0} Views
+                  </span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1">
+                    <ThumbsUp className="w-3.5 h-3.5" /> {engagement[selectedResult.document_id]?.like_count ?? 0} Likes
+                  </span>
+                  <button
+                    onClick={toggleLike}
+                    disabled={likeBusy}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-60 ${
+                      liked
+                        ? 'bg-brand-600 border-brand-600 text-white'
+                        : 'bg-white border-slate-300 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+                    }`}
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    {liked ? 'Liked' : 'Like'}
+                  </button>
                 </div>
               </div>
               <button onClick={() => setSelectedResult(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors">

@@ -9,6 +9,7 @@ import AdminLibrary from '@/pages/admin/AdminLibrary';
 import AdminUpload from '@/pages/admin/AdminUpload';
 import AdminReviewList from '@/pages/admin/AdminReviewList';
 import AdminReviewDetail from '@/pages/admin/AdminReviewDetail';
+import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import VAPortal from '@/pages/VAPortal';
 
 function RootRedirect() {
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="upload" element={<AdminUpload />} />
             <Route path="review" element={<AdminReviewList />} />
             <Route path="review/:id" element={<AdminReviewDetail />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
           </Route>
 
           <Route path="/portal" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
