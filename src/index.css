@@ -1,11 +1,3 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* The admin console was sized a bit large on typical displays - this scales
-   the whole app down slightly so it reads like a normal, dense desktop app
-   instead of feeling zoomed in. Adjust this one number if it ever needs to
-   change again. */
-html {
-  zoom: 0.9;
-}
