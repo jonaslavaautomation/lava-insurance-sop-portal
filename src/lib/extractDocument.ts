@@ -1,5 +1,5 @@
 import type { SopStep } from '@/lib/supabase';
-import { splitIntoListItems } from '@/lib/splitIntoSteps';
+import { splitIntoListItems, splitOnStepHeadings, splitStepChunk } from '@/lib/splitIntoSteps';
 
 export interface ExtractedImage {
   dataUrl: string;
@@ -59,13 +59,19 @@ export async function extractTextFromFile(file: File): Promise<ExtractedDocument
 }
 
 /**
- * Recognizes a document that's really a step-by-step walkthrough — numbered
- * markers ("1: Do this", "Step 1: Do this") and/or bullet points
- * ("• Do this"), mixed however the source document actually uses them —
- * rather than an ordinary prose document. When it matches, folds text +
- * images into the same per-step shape used for a direct Tango import, so it
- * renders with the numbered-walkthrough viewer instead of being squeezed
- * into paragraphs.
+ * Recognizes a document that's really a step-by-step walkthrough and folds
+ * text + images into the same per-step shape used for a direct Tango
+ * import, so it renders with the numbered-walkthrough viewer instead of
+ * being squeezed into paragraphs. Two shapes are recognized:
+ *
+ *  - A handful of named "Step N" sections, each with its own body text
+ *    (which may itself contain a nested numbered/bulleted sub-list — kept
+ *    intact as that step's description, not flattened into more steps) —
+ *    see splitOnStepHeadings. This is preferred when present: it's what
+ *    keeps "Step 1: Go to the home page / 1. Click X / 2. Click Y" as ONE
+ *    step with two sub-instructions, not three separate steps.
+ *  - A flat numbered/bulleted list with no "Step N" headings — every
+ *    marker is its own step, title only, same as before.
  *
  * Images are matched to items page-by-page, not by a single global index:
  * each page's own images are attached to the tail end of that same page's
@@ -78,8 +84,13 @@ export async function extractTextFromFile(file: File): Promise<ExtractedDocument
  */
 function detectNumberedSteps(pageBundles: PageBundle[]): SopStep[] | null {
   const fullText = pageBundles.map((p) => p.text).join('\n\n');
-  const titles = splitIntoListItems(fullText);
-  if (!titles || titles.length < 3) return null;
+
+  const stepChunks = splitOnStepHeadings(fullText);
+  const usingStepHeadings = !!stepChunks;
+  const items = stepChunks ?? splitIntoListItems(fullText);
+  if (!items) return null;
+
+  const split = usingStepHeadings ? splitOnStepHeadings : splitIntoListItems;
 
   // How many of the final items came from each page, by re-running the same
   // split against the text accumulated through that page. Small documents
@@ -90,25 +101,52 @@ function detectNumberedSteps(pageBundles: PageBundle[]): SopStep[] | null {
 
   for (const { text: pageText, images: pageImages } of pageBundles) {
     cumulativeText += (cumulativeText ? '\n\n' : '') + pageText;
-    const count = splitIntoListItems(cumulativeText)?.length ?? prevCount;
+    const count = split(cumulativeText)?.length ?? prevCount;
 
-    // Place this page's images at the end of its own item range, working
-    // backwards so several images on one page stack correctly instead of
-    // overwriting the same slot.
-    let slot = count - 1;
-    for (let k = pageImages.length - 1; k >= 0 && slot >= prevCount; k--, slot--) {
-      imageAtItemIndex.set(slot, pageImages[k]);
+    if (usingStepHeadings) {
+      // Step headings (unlike a flat numbered list) commonly cluster
+      // several-to-a-page while a step's screenshot doesn't land until a
+      // later page — the flat-list heuristic below (dump everything at the
+      // page's tail item) would attach an early page's image to whatever
+      // step happens to be LAST introduced on that page, which is wrong
+      // when that page introduced more than one new step. Instead: give
+      // each new step introduced on this page a shot at one of this page's
+      // images in order (an image sharing a page with a step's own heading
+      // usually illustrates THAT step), then let any leftover images on the
+      // page — including a page that introduces no new step at all, i.e. a
+      // continuation page — fall to whatever step is still open at the end
+      // of the page, first image wins if there's more than one to choose
+      // from (one step can only carry a single screenshot).
+      let imgIdx = 0;
+      for (let s = prevCount; s < count && imgIdx < pageImages.length; s++, imgIdx++) {
+        imageAtItemIndex.set(s, pageImages[imgIdx]);
+      }
+      const openStep = count - 1;
+      for (; imgIdx < pageImages.length && openStep >= 0; imgIdx++) {
+        if (!imageAtItemIndex.has(openStep)) imageAtItemIndex.set(openStep, pageImages[imgIdx]);
+      }
+    } else {
+      // Place this page's images at the end of its own item range, working
+      // backwards so several images on one page stack correctly instead of
+      // overwriting the same slot.
+      let slot = count - 1;
+      for (let k = pageImages.length - 1; k >= 0 && slot >= prevCount; k--, slot--) {
+        imageAtItemIndex.set(slot, pageImages[k]);
+      }
     }
     prevCount = count;
   }
 
-  return titles.map((title, i) => ({
-    stepIndex: i,
-    title,
-    description: '',
-    imageUrl: imageAtItemIndex.get(i)?.dataUrl ?? null,
-    sourceUrl: null,
-  }));
+  return items.map((item, i) => {
+    const { title, description } = usingStepHeadings ? splitStepChunk(item) : { title: item, description: '' };
+    return {
+      stepIndex: i,
+      title,
+      description,
+      imageUrl: imageAtItemIndex.get(i)?.dataUrl ?? null,
+      sourceUrl: null,
+    };
+  });
 }
 
 async function extractPdfPages(file: File): Promise<PageBundle[]> {
