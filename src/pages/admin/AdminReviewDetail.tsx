@@ -5,6 +5,7 @@ import { supabase, type SopDocument, type SopContent, type SopVersion, type Insu
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { ErrorState } from '@/components/admin/DataStates';
+import { SensitiveTextScanner } from '@/components/admin/SensitiveTextScanner';
 
 export default function AdminReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -199,6 +200,9 @@ export default function AdminReviewDetail() {
               rows={16}
               className="w-full px-4 py-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm font-mono text-slate-100 resize-y"
             />
+            <div className="mt-3">
+              <SensitiveTextScanner content={editableContent} onChange={setEditableContent} />
+            </div>
             <div className="mt-5 border border-white/[0.08] rounded-lg p-5 bg-white">
               <p className="text-sm font-medium text-slate-500 mb-3.5">Preview — this is what VAs will see</p>
               <DocumentViewer content={editableContent} images={content?.images} />

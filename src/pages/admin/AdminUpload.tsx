@@ -6,6 +6,7 @@ import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument'
 import { StepsViewer } from '@/components/StepsViewer';
 import { ImageRedactor } from '@/components/ImageRedactor';
 import { ErrorState, LoadingState } from '@/components/admin/DataStates';
+import { SensitiveTextScanner } from '@/components/admin/SensitiveTextScanner';
 
 export default function AdminUpload() {
   const navigate = useNavigate();
@@ -335,6 +336,7 @@ export default function AdminUpload() {
                   placeholder="Paste the full SOP document text here..."
                   className={`${textareaClass} font-mono resize-y`}
                 />
+                {content.trim() && <SensitiveTextScanner content={content} onChange={setContent} />}
               </>
             )}
           </div>
@@ -346,8 +348,9 @@ export default function AdminUpload() {
               Review Screenshots for Sensitive Info
             </label>
             <p className="text-xs text-slate-500 mb-3">
-              Each screenshot is scanned for likely customer info (names, policy numbers, VINs, contact
-              details, addresses...) — accept, adjust, or draw your own boxes, then apply to black it out.
+              Each screenshot is scanned for likely customer/claim info (names, SSNs, policy and claim
+              numbers, driver's license, VINs, bank/card numbers, contact details, addresses...) — accept,
+              adjust, or draw your own boxes, then apply to black it out.
               Every screenshot needs a look before this can be uploaded.
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
