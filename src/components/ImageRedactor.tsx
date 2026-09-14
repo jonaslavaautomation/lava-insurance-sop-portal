@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, ScanEye, Check, X as XIcon, Info, Square, ArrowUpRight, EyeOff, PenLine } from 'lucide-react';
+import { pixelateRegion as pixelateRegionShared } from '@/lib/autoRedactImage';
 
 type Tool = 'redact' | 'arrow' | 'highlight' | 'pen';
 
@@ -254,41 +255,12 @@ export function ImageRedactor({
     }
   }
 
-  /**
-   * True pixelation/mosaic, not blur: draws the region at a tiny size
-   * (letting the browser average many source pixels into each one) then
-   * draws that tiny result back up with smoothing off (hard block edges,
-   * no interpolation). Unlike Gaussian blur, this genuinely destroys the
-   * underlying detail — there's no way to mathematically reverse an
-   * averaging step back to the original pixels, which is exactly why real
-   * redaction tools (and broadcast face/plate blurring) use pixelation
-   * instead of blur.
-   */
+  // True pixelation/mosaic, not blur — see the comment on the shared
+  // implementation in autoRedactImage.ts (also used by the automatic
+  // upload-time redaction pass, so both apply the exact same mosaic).
   function pixelateRegion(ctx: CanvasRenderingContext2D, source: HTMLImageElement, x: number, y: number, width: number, height: number) {
-    if (!natural || width <= 0 || height <= 0) return;
-    // Clamp to the image bounds — drawImage throws if the source rect falls
-    // outside the source image (a box near an edge, after padding, can).
-    const sx = Math.max(0, x);
-    const sy = Math.max(0, y);
-    const sw = Math.min(natural.w, x + width) - sx;
-    const sh = Math.min(natural.h, y + height) - sy;
-    if (sw <= 0 || sh <= 0) return;
-
-    const blockSize = Math.max(8, Math.min(sw, sh) / 4);
-    const smallW = Math.max(1, Math.round(sw / blockSize));
-    const smallH = Math.max(1, Math.round(sh / blockSize));
-
-    const small = document.createElement('canvas');
-    small.width = smallW;
-    small.height = smallH;
-    const smallCtx = small.getContext('2d');
-    if (!smallCtx) return;
-    smallCtx.imageSmoothingEnabled = true;
-    smallCtx.drawImage(source, sx, sy, sw, sh, 0, 0, smallW, smallH);
-
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(small, 0, 0, smallW, smallH, sx, sy, sw, sh);
-    ctx.imageSmoothingEnabled = true;
+    if (!natural) return;
+    pixelateRegionShared(ctx, source, natural.w, natural.h, x, y, width, height);
   }
 
   function drawArrowOnCanvas(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {

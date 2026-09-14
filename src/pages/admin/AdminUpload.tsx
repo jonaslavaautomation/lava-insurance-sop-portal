@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, EyeOff, Building2, Server } from 'lucide-react';
+import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, ScanEye, Building2, Server } from 'lucide-react';
 import { supabase, type InsuranceCompany, type CompanySourceType, type SopStep } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
+import { autoRedactImage } from '@/lib/autoRedactImage';
 import { StepsViewer } from '@/components/StepsViewer';
 import { ImageRedactor } from '@/components/ImageRedactor';
 import { ErrorState, LoadingState } from '@/components/admin/DataStates';
@@ -27,11 +28,21 @@ export default function AdminUpload() {
   const [parsing, setParsing] = useState(false);
   const [images, setImages] = useState<ExtractedImage[]>([]);
   const [steps, setSteps] = useState<SopStep[] | null>(null);
-  const [reviewedIndices, setReviewedIndices] = useState<Set<number>>(new Set());
+  // The as-extracted screenshots, before auto-redaction touches them —
+  // kept around so opening the manual editor (below) always starts from a
+  // clean source to fully re-scan/re-adjust, never from an already-baked
+  // mosaic it can't undo.
+  const [originalImages, setOriginalImages] = useState<ExtractedImage[]>([]);
+  const [originalSteps, setOriginalSteps] = useState<SopStep[] | null>(null);
+  const [autoRedacting, setAutoRedacting] = useState(false);
+  // index -> how many sensitive regions the automatic pass found/redacted
+  // on that screenshot (0 = scanned, nothing found).
+  const [redactionCounts, setRedactionCounts] = useState<Record<number, number>>({});
   const [redactorIndex, setRedactorIndex] = useState<number | null>(null);
 
-  // Unified view of "images that came out of this upload and need a look
-  // before publishing" — whichever source they're in (steps or flat images).
+  // Unified view of "images that came out of this upload" — whichever
+  // source they're in (steps or flat images) — always the current
+  // (auto-redacted) versions, what's actually shown and uploaded.
   const reviewableImages: { index: number; dataUrl: string }[] =
     steps && steps.length > 0
       ? steps
@@ -39,7 +50,14 @@ export default function AdminUpload() {
           .filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
       : images.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
 
-  const allImagesReviewed = reviewableImages.every((r) => reviewedIndices.has(r.index));
+  // The same list, but sourced from the untouched originals — what gets
+  // handed to the manual editor so it can scan/adjust from scratch.
+  const originalReviewableImages: { index: number; dataUrl: string }[] =
+    originalSteps && originalSteps.length > 0
+      ? originalSteps
+          .map((s, i) => ({ index: i, dataUrl: s.imageUrl }))
+          .filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
+      : originalImages.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
 
   function applyRedaction(index: number, redactedDataUrl: string) {
     if (steps && steps.length > 0) {
@@ -47,12 +65,51 @@ export default function AdminUpload() {
     } else {
       setImages((prev) => prev.map((im, i) => (i === index ? { ...im, dataUrl: redactedDataUrl } : im)));
     }
-    setReviewedIndices((prev) => new Set(prev).add(index));
     setRedactorIndex(null);
   }
 
-  function markNoRedactionNeeded(index: number) {
-    setReviewedIndices((prev) => new Set(prev).add(index));
+  // Runs the moment screenshots come out of an upload — OCRs each one,
+  // detects likely sensitive insurance/customer fields, and bakes a
+  // pixelated mosaic over just those spots, automatically. No click
+  // required; the admin can still open any thumbnail afterward to review
+  // or fully redo it (see originalImages/originalSteps above).
+  async function autoRedactAll(extractedImages: ExtractedImage[], extractedSteps: SopStep[] | null) {
+    const targets = extractedSteps && extractedSteps.length > 0
+      ? extractedSteps.map((s, i) => ({ index: i, dataUrl: s.imageUrl })).filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
+      : extractedImages.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
+
+    if (targets.length === 0) return;
+
+    setAutoRedacting(true);
+    const results = await Promise.all(
+      targets.map(async (t) => {
+        try {
+          const { redactedDataUrl, regions } = await autoRedactImage(t.dataUrl);
+          return { index: t.index, redactedDataUrl, count: regions.length };
+        } catch (err) {
+          console.error('Automatic redaction failed for a screenshot:', err);
+          return { index: t.index, redactedDataUrl: t.dataUrl, count: 0 };
+        }
+      })
+    );
+
+    if (extractedSteps && extractedSteps.length > 0) {
+      setSteps((prev) => {
+        if (!prev) return prev;
+        const next = [...prev];
+        for (const r of results) next[r.index] = { ...next[r.index], imageUrl: r.redactedDataUrl };
+        return next;
+      });
+    } else {
+      setImages((prev) => {
+        const next = [...prev];
+        for (const r of results) next[r.index] = { ...next[r.index], dataUrl: r.redactedDataUrl };
+        return next;
+      });
+    }
+
+    setRedactionCounts(Object.fromEntries(results.map((r) => [r.index, r.count])));
+    setAutoRedacting(false);
   }
 
   useEffect(() => {
@@ -93,13 +150,21 @@ export default function AdminUpload() {
       setContent(text);
       setImages(extractedImages);
       setSteps(extractedSteps ?? null);
-      setReviewedIndices(new Set());
+      setOriginalImages(extractedImages);
+      setOriginalSteps(extractedSteps ?? null);
+      setRedactionCounts({});
+      // Runs in the background — parsing is done, so the form is usable
+      // immediately; the screenshot grid below shows its own "scanning" state
+      // until this finishes.
+      void autoRedactAll(extractedImages, extractedSteps ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.');
       setFileName('');
       setImages([]);
       setSteps(null);
-      setReviewedIndices(new Set());
+      setOriginalImages([]);
+      setOriginalSteps(null);
+      setRedactionCounts({});
     } finally {
       setParsing(false);
     }
@@ -113,7 +178,7 @@ export default function AdminUpload() {
     if (!companyId) { setError(sourceType === 'ams' ? 'Please select an AMS.' : 'Please select an insurance company.'); return; }
     if (!title.trim()) { setError('Please enter a title.'); return; }
     if (!content.trim()) { setError('Please provide SOP content (paste text or upload a text file).'); return; }
-    if (!allImagesReviewed) { setError('Please review every screenshot for sensitive info before uploading.'); return; }
+    if (autoRedacting) { setError('Still scanning screenshots for sensitive info — one moment.'); return; }
 
     setSubmitting(true);
 
@@ -320,7 +385,7 @@ export default function AdminUpload() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setSteps(null); setImages([]); setFileName(''); setContent(''); setReviewedIndices(new Set()); }}
+                  onClick={() => { setSteps(null); setImages([]); setOriginalSteps(null); setOriginalImages([]); setRedactionCounts({}); setFileName(''); setContent(''); }}
                   className="text-xs text-slate-500 hover:text-slate-300 mt-2"
                 >
                   Not right? Clear and paste text instead
@@ -331,7 +396,7 @@ export default function AdminUpload() {
                 <p className="text-xs text-slate-600 text-center">or paste the SOP content below</p>
                 <textarea
                   value={content}
-                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setReviewedIndices(new Set()); }}
+                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setOriginalImages([]); setOriginalSteps(null); setRedactionCounts({}); }}
                   rows={12}
                   placeholder="Paste the full SOP document text here..."
                   className={`${textareaClass} font-mono resize-y`}
@@ -345,22 +410,28 @@ export default function AdminUpload() {
         {reviewableImages.length > 0 && (
           <div>
             <label className={labelClass}>
-              Review Screenshots for Sensitive Info
+              Screenshots — Automatically Scanned &amp; Redacted
             </label>
             <p className="text-xs text-slate-500 mb-3">
-              Each screenshot is scanned for likely customer/claim info (names, SSNs, policy and claim
-              numbers, driver's license, VINs, bank/card numbers, contact details, addresses...) — accept,
-              adjust, or draw your own boxes, then apply to black it out.
-              Every screenshot needs a look before this can be uploaded.
+              Every screenshot is scanned automatically for likely customer/claim info (names, SSNs, policy
+              and claim numbers, driver's license, VINs, bank/card numbers, contact details, addresses...)
+              and only those exact spots are pixelated — nothing else on the image is touched, and nothing
+              is left for you to click. Open any screenshot to double-check it or adjust it by hand.
             </p>
+            {autoRedacting && (
+              <div className="flex items-center gap-2 text-xs text-brand-400 bg-brand-500/10 border border-brand-500/20 rounded-lg px-3 py-2 mb-3">
+                <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                Scanning {reviewableImages.length} screenshot{reviewableImages.length !== 1 ? 's' : ''} for sensitive info…
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {reviewableImages.map(({ index, dataUrl }) => {
-                const reviewed = reviewedIndices.has(index);
+                const count = redactionCounts[index];
                 return (
                   <div
                     key={index}
                     className={`relative rounded-lg border-2 overflow-hidden ${
-                      reviewed ? 'border-emerald-500/50' : 'border-amber-500/50'
+                      autoRedacting ? 'border-white/15' : count ? 'border-emerald-500/50' : 'border-white/15'
                     }`}
                   >
                     <button type="button" onClick={() => setRedactorIndex(index)} className="block w-full">
@@ -368,39 +439,34 @@ export default function AdminUpload() {
                     </button>
                     <div
                       className={`absolute top-1 right-1 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full pointer-events-none ${
-                        reviewed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                        autoRedacting
+                          ? 'bg-white/20 text-slate-200'
+                          : count
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-white/20 text-slate-300'
                       }`}
                     >
-                      {reviewed ? <ShieldCheck className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                      {reviewed ? 'Reviewed' : 'Needs review'}
+                      {autoRedacting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : count ? (
+                        <ShieldCheck className="w-3 h-3" />
+                      ) : (
+                        <ScanEye className="w-3 h-3" />
+                      )}
+                      {autoRedacting ? 'Scanning…' : count ? `${count} redacted` : 'Clean'}
                     </div>
-                    {!reviewed && (
-                      <button
-                        type="button"
-                        onClick={() => markNoRedactionNeeded(index)}
-                        className="absolute bottom-1 right-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/90 text-slate-700 hover:bg-white"
-                      >
-                        No PII, skip
-                      </button>
-                    )}
                   </div>
                 );
               })}
             </div>
-            {!allImagesReviewed && (
-              <p className="text-xs text-amber-400 mt-2">
-                {reviewableImages.length - reviewedIndices.size} of {reviewableImages.length} screenshot
-                {reviewableImages.length !== 1 ? 's' : ''} still need{reviewableImages.length === 1 ? 's' : ''} review.
-              </p>
-            )}
           </div>
         )}
 
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={submitting || parsing || !allImagesReviewed || !companyId}
-            title={!allImagesReviewed ? 'Review every screenshot for sensitive info first' : undefined}
+            disabled={submitting || parsing || autoRedacting || !companyId}
+            title={autoRedacting ? 'Still scanning screenshots for sensitive info' : undefined}
             className="h-11 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 rounded-lg transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
@@ -416,12 +482,15 @@ export default function AdminUpload() {
         </div>
       </form>
 
-      {redactorIndex !== null && reviewableImages.find((r) => r.index === redactorIndex) && (
+      {redactorIndex !== null && originalReviewableImages.find((r) => r.index === redactorIndex) && (
         <div className="fixed inset-0 bg-black/60 z-30 flex items-center justify-center p-4" onClick={() => setRedactorIndex(null)}>
           <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-bold text-slate-900 mb-4">Review Screenshot</h2>
+            <p className="text-xs text-slate-500 -mt-3 mb-4">
+              Re-scanning the original — anything already auto-redacted stays that way unless you turn it off below.
+            </p>
             <ImageRedactor
-              dataUrl={reviewableImages.find((r) => r.index === redactorIndex)!.dataUrl}
+              dataUrl={originalReviewableImages.find((r) => r.index === redactorIndex)!.dataUrl}
               onApply={(redacted) => applyRedaction(redactorIndex, redacted)}
               onCancel={() => setRedactorIndex(null)}
             />
