@@ -5,6 +5,7 @@ import Login from '@/pages/Login';
 import AdminLayout from '@/pages/admin/AdminLayout';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminCompanies from '@/pages/admin/AdminCompanies';
+import AdminAMS from '@/pages/admin/AdminAMS';
 import AdminLibrary from '@/pages/admin/AdminLibrary';
 import AdminUpload from '@/pages/admin/AdminUpload';
 import AdminReviewList from '@/pages/admin/AdminReviewList';
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/admin" element={<ProtectedRoute adminOnly><AdminLayout /></ProtectedRoute>}>
             <Route index element={<AdminDashboard />} />
             <Route path="companies" element={<AdminCompanies />} />
+            <Route path="ams" element={<AdminAMS />} />
             <Route path="library" element={<AdminLibrary />} />
             <Route path="upload" element={<AdminUpload />} />
             <Route path="review" element={<AdminReviewList />} />

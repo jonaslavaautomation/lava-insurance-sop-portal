@@ -192,7 +192,7 @@ export default function AdminAnalytics() {
               <tr>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Rank</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">SOP / Process Name</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Carrier</th>
+                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Source</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Category</th>
                 <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">{primaryLabel}</th>
                 <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden sm:table-cell">{secondaryLabel}</th>

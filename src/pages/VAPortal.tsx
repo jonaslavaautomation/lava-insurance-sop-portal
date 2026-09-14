@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Building2, FileText, ChevronRight, Loader2, Info, X, LogOut, Eye, ThumbsUp } from 'lucide-react';
-import { supabase, type InsuranceCompany, type SearchResult, type SopEngagement } from '@/lib/supabase';
+import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp } from 'lucide-react';
+import { supabase, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopEngagement } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
@@ -11,6 +11,9 @@ export default function VAPortal() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
+  // Two separate "folders" a VA picks between before choosing a specific
+  // carrier or AMS - null means "show the folder picker".
+  const [category, setCategory] = useState<CompanySourceType | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -30,6 +33,24 @@ export default function VAPortal() {
     }
     load();
   }, []);
+
+  const carrierCount = useMemo(() => companies.filter((c) => c.type === 'carrier').length, [companies]);
+  const amsCount = useMemo(() => companies.filter((c) => c.type === 'ams').length, [companies]);
+  const visibleCompanies = useMemo(() => companies.filter((c) => c.type === category), [companies, category]);
+
+  function chooseCategory(next: CompanySourceType) {
+    setCategory(next);
+    setSelectedCompany('');
+    setHasSearched(false);
+    setResults([]);
+  }
+
+  function backToCategories() {
+    setCategory(null);
+    setSelectedCompany('');
+    setHasSearched(false);
+    setResults([]);
+  }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -171,145 +192,188 @@ export default function VAPortal() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 bg-sky-500/10 rounded-md flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-sky-400" />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-slate-100">Select Insurance Company</label>
-              <p className="text-xs text-slate-500">Choose the company to search within</p>
-            </div>
-          </div>
-          <select
-            value={selectedCompany}
-            onChange={(e) => { setSelectedCompany(e.target.value); setHasSearched(false); setResults([]); }}
-            disabled={loading}
-            className="w-full px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
-          >
-            <option value="" className="bg-ink-secondary">{loading ? 'Loading...' : 'Select an insurance company...'}</option>
-            {companies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
-          </select>
-        </div>
-
-        {selectedCompany && (
-          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 bg-emerald-500/10 rounded-md flex items-center justify-center">
-                <Search className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-100">Search Process / Workflow</label>
-                <p className="text-xs text-slate-500">Search within {companies.find((c) => c.id === selectedCompany)?.name} approved SOPs</p>
-              </div>
-            </div>
-            <form onSubmit={handleSearch} className="flex gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="e.g. Cancellation, Claims, Underwriting..."
-                  className="w-full pl-9 pr-4 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={searching || !searchQuery.trim()}
-                className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 py-2.5 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
-              >
-                {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search
-              </button>
-            </form>
-          </div>
-        )}
-
-        {searching && (
-          <div className="text-center py-12">
-            <Loader2 className="w-5 h-5 text-brand-500 animate-spin mx-auto mb-3" />
-            <p className="text-sm text-slate-500">Searching approved SOPs...</p>
-          </div>
-        )}
-
-        {!searching && hasSearched && results.length === 0 && !selectedResult && (
-          <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-12 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-white/[0.04] rounded-lg mb-4">
-              <Info className="w-6 h-6 text-slate-500" />
-            </div>
-            <h3 className="text-sm font-semibold text-slate-100 mb-2">No information was found</h3>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">
-              No information was found in the available SOP documents for &ldquo;{searchQuery}&rdquo;.
-              The system does not generate alternative processes. Please try a different search term.
-            </p>
-          </div>
-        )}
-
-        {!searching && hasSearched && results.length > 0 && !selectedResult && (
+        {loading ? null : !category ? (
           <div>
-            <p className="text-xs text-slate-500 mb-3">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
-            <div className="space-y-2.5">
-              {results.map((result) => (
-                <button
-                  key={result.document_id}
-                  onClick={() => openResult(result)}
-                  className="w-full text-left bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-4 h-4 text-brand-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-slate-100 truncate">{result.title}</p>
-                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
-                          <span className="text-[11px] text-slate-500">{result.process_category}</span>
-                          <span className="text-[11px] text-slate-700">|</span>
-                          <span className="text-[11px] text-slate-500">{result.line_of_business}</span>
-                          <span className="text-[11px] text-slate-700">|</span>
-                          <span className="text-[11px] font-mono text-slate-500">v{result.version}</span>
-                          <span className="text-[11px] text-slate-700">|</span>
-                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <Eye className="w-3 h-3" /> {engagement[result.document_id]?.view_count ?? 0}
-                          </span>
-                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <ThumbsUp className="w-3 h-3" /> {engagement[result.document_id]?.like_count ?? 0}
-                          </span>
+            <h2 className="text-base font-semibold text-slate-100 mb-1">What are you looking for?</h2>
+            <p className="text-sm text-slate-500 mb-5">Choose a category to browse its approved SOPs</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                onClick={() => chooseCategory('carrier')}
+                className="text-left bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+              >
+                <div className="w-12 h-12 bg-sky-500/10 rounded-lg flex items-center justify-center mb-4">
+                  <Building2 className="w-6 h-6 text-sky-400" />
+                </div>
+                <h3 className="text-base font-semibold text-slate-100">Insurance Carriers</h3>
+                <p className="text-sm text-slate-500 mt-1">{carrierCount} carrier{carrierCount !== 1 ? 's' : ''} available</p>
+                <div className="flex items-center gap-1.5 text-brand-400 text-sm font-medium mt-4">
+                  Browse <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </button>
+              <button
+                onClick={() => chooseCategory('ams')}
+                className="text-left bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+              >
+                <div className="w-12 h-12 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-4">
+                  <Server className="w-6 h-6 text-emerald-400" />
+                </div>
+                <h3 className="text-base font-semibold text-slate-100">AMS</h3>
+                <p className="text-sm text-slate-500 mt-1">{amsCount} platform{amsCount !== 1 ? 's' : ''} available</p>
+                <div className="flex items-center gap-1.5 text-brand-400 text-sm font-medium mt-4">
+                  Browse <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={backToCategories}
+              className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-300 mb-4 transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> All Categories
+            </button>
+
+            <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-8 h-8 rounded-md flex items-center justify-center ${category === 'ams' ? 'bg-emerald-500/10' : 'bg-sky-500/10'}`}>
+                  {category === 'ams' ? <Server className="w-4 h-4 text-emerald-400" /> : <Building2 className="w-4 h-4 text-sky-400" />}
+                </div>
+                <div>
+                  <label className="block text-[13px] font-semibold text-slate-100">{category === 'ams' ? 'Select AMS' : 'Select Insurance Company'}</label>
+                  <p className="text-xs text-slate-500">{category === 'ams' ? 'Choose the AMS platform to search within' : 'Choose the company to search within'}</p>
+                </div>
+              </div>
+              <select
+                value={selectedCompany}
+                onChange={(e) => { setSelectedCompany(e.target.value); setHasSearched(false); setResults([]); }}
+                className="w-full px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
+              >
+                <option value="" className="bg-ink-secondary">{category === 'ams' ? 'Select an AMS...' : 'Select an insurance company...'}</option>
+                {visibleCompanies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
+              </select>
+            </div>
+
+            {selectedCompany && (
+              <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-emerald-500/10 rounded-md flex items-center justify-center">
+                    <Search className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-semibold text-slate-100">Search Process / Workflow</label>
+                    <p className="text-xs text-slate-500">Search within {companies.find((c) => c.id === selectedCompany)?.name} approved SOPs</p>
+                  </div>
+                </div>
+                <form onSubmit={handleSearch} className="flex gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="e.g. Cancellation, Claims, Underwriting..."
+                      className="w-full pl-9 pr-4 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={searching || !searchQuery.trim()}
+                    className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 py-2.5 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
+                  >
+                    {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Search
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {searching && (
+              <div className="text-center py-12">
+                <Loader2 className="w-5 h-5 text-brand-500 animate-spin mx-auto mb-3" />
+                <p className="text-sm text-slate-500">Searching approved SOPs...</p>
+              </div>
+            )}
+
+            {!searching && hasSearched && results.length === 0 && !selectedResult && (
+              <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-12 text-center">
+                <div className="inline-flex items-center justify-center w-12 h-12 bg-white/[0.04] rounded-lg mb-4">
+                  <Info className="w-6 h-6 text-slate-500" />
+                </div>
+                <h3 className="text-sm font-semibold text-slate-100 mb-2">No information was found</h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  No information was found in the available SOP documents for &ldquo;{searchQuery}&rdquo;.
+                  The system does not generate alternative processes. Please try a different search term.
+                </p>
+              </div>
+            )}
+
+            {!searching && hasSearched && results.length > 0 && !selectedResult && (
+              <div>
+                <p className="text-xs text-slate-500 mb-3">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
+                <div className="space-y-2.5">
+                  {results.map((result) => (
+                    <button
+                      key={result.document_id}
+                      onClick={() => openResult(result)}
+                      className="w-full text-left bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-4 h-4 text-brand-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-medium text-slate-100 truncate">{result.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
+                              <span className="text-[11px] text-slate-500">{result.process_category}</span>
+                              <span className="text-[11px] text-slate-700">|</span>
+                              <span className="text-[11px] text-slate-500">{result.line_of_business}</span>
+                              <span className="text-[11px] text-slate-700">|</span>
+                              <span className="text-[11px] font-mono text-slate-500">v{result.version}</span>
+                              <span className="text-[11px] text-slate-700">|</span>
+                              <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                <Eye className="w-3 h-3" /> {engagement[result.document_id]?.view_count ?? 0}
+                              </span>
+                              <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                <ThumbsUp className="w-3 h-3" /> {engagement[result.document_id]?.like_count ?? 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium flex-shrink-0">
+                          View SOP
+                          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium flex-shrink-0">
-                      View SOP
-                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {!searching && !hasSearched && selectedCompany && (
-          <div className="bg-brand-500/[0.06] border border-brand-500/20 rounded-lg p-4 flex items-start gap-3">
-            <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm text-slate-200 font-medium">Ready to search</p>
-              <p className="text-xs text-slate-400 mt-1">
-                Enter a process or workflow term above to search within the approved SOP documents for {companies.find((c) => c.id === selectedCompany)?.name}.
-                Only published SOPs are included in search results.
-              </p>
-            </div>
-          </div>
-        )}
+            {!searching && !hasSearched && selectedCompany && (
+              <div className="bg-brand-500/[0.06] border border-brand-500/20 rounded-lg p-4 flex items-start gap-3">
+                <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-slate-200 font-medium">Ready to search</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enter a process or workflow term above to search within the approved SOP documents for {companies.find((c) => c.id === selectedCompany)?.name}.
+                    Only published SOPs are included in search results.
+                  </p>
+                </div>
+              </div>
+            )}
 
-        {!searching && !hasSearched && !selectedCompany && !loading && (
-          <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-white/[0.04] rounded-lg mb-4">
-              <Building2 className="w-7 h-7 text-slate-600" />
-            </div>
-            <p className="text-slate-500 text-sm">Select an insurance company above to begin searching.</p>
-          </div>
+            {!searching && !hasSearched && !selectedCompany && (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-white/[0.04] rounded-lg mb-4">
+                  {category === 'ams' ? <Server className="w-7 h-7 text-slate-600" /> : <Building2 className="w-7 h-7 text-slate-600" />}
+                </div>
+                <p className="text-slate-500 text-sm">{category === 'ams' ? 'Select an AMS above to begin searching.' : 'Select an insurance company above to begin searching.'}</p>
+              </div>
+            )}
+          </>
         )}
       </main>
 

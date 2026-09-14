@@ -498,6 +498,18 @@ AS $$
 $$;
 
 -- ============================================================
+-- AMS (Agency Management System) AS A SECOND SOP SOURCE TYPE
+-- ============================================================
+-- An AMS is agency software, not an insurance company - but it needs the
+-- exact same SOP pipeline (documents, content, search, analytics), so it's
+-- a second `type` on the existing companies table rather than a whole
+-- parallel table + rewritten RPCs. All existing rows default to 'carrier'.
+ALTER TABLE insurance_companies
+  ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'carrier' CHECK (type IN ('carrier', 'ams'));
+
+CREATE INDEX IF NOT EXISTS idx_insurance_companies_type ON insurance_companies(type);
+
+-- ============================================================
 -- Force PostgREST to pick up the schema immediately.
 -- Fixes "Could not find the table 'public.<table>' in the schema
 -- cache" if it ever shows up right after running migrations.

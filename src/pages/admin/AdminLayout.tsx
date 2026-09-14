@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Library, FileCheck, LogOut, ExternalLink,
+  LayoutDashboard, Building2, Server, Library, FileCheck, LogOut, ExternalLink,
   BarChart3, Search, Settings, PanelLeft, Plus, Clock, ChevronDown, ChevronRight, User,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +12,7 @@ import { supabase, type SopDocument } from '@/lib/supabase';
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, countKey: null },
   { to: '/admin/companies', label: 'Insurance Companies', icon: Building2, end: false, countKey: 'companies' as const },
+  { to: '/admin/ams', label: 'AMS', icon: Server, end: false, countKey: 'ams' as const },
   { to: '/admin/library', label: 'SOP Library', icon: Library, end: false, countKey: 'documents' as const },
   { to: '/admin/review', label: 'Pending Reviews', icon: FileCheck, end: false, countKey: 'pending' as const, alert: true },
   { to: '/admin/analytics', label: 'SOP Analytics', icon: BarChart3, end: false, countKey: null },
@@ -20,6 +21,7 @@ const navItems = [
 const BREADCRUMB_LABELS: Record<string, string> = {
   '/admin': 'Dashboard',
   '/admin/companies': 'Insurance Companies',
+  '/admin/ams': 'AMS',
   '/admin/library': 'SOP Library',
   '/admin/upload': 'Upload SOP',
   '/admin/review': 'Pending Reviews',
@@ -49,8 +51,8 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [counts, setCounts] = useState<{ companies: number; documents: number; pending: number }>({
-    companies: 0, documents: 0, pending: 0,
+  const [counts, setCounts] = useState<{ companies: number; ams: number; documents: number; pending: number }>({
+    companies: 0, ams: 0, documents: 0, pending: 0,
   });
   const [recentDocs, setRecentDocs] = useState<SopDocument[]>([]);
   const [systemOk, setSystemOk] = useState<boolean | null>(null);
@@ -63,17 +65,19 @@ export default function AdminLayout() {
     async function load() {
       const [
         { count: companies, error: e1 },
+        { count: ams, error: e1b },
         { count: documents, error: e2 },
         { count: pending, error: e3 },
         { data: recent },
       ] = await Promise.all([
-        supabase.from('insurance_companies').select('*', { count: 'exact', head: true }),
+        supabase.from('insurance_companies').select('*', { count: 'exact', head: true }).eq('type', 'carrier'),
+        supabase.from('insurance_companies').select('*', { count: 'exact', head: true }).eq('type', 'ams'),
         supabase.from('sop_documents').select('*', { count: 'exact', head: true }),
         supabase.from('sop_documents').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('sop_documents').select('*').order('created_at', { ascending: false }).limit(5),
       ]);
-      setCounts({ companies: companies ?? 0, documents: documents ?? 0, pending: pending ?? 0 });
-      setSystemOk(!e1 && !e2 && !e3);
+      setCounts({ companies: companies ?? 0, ams: ams ?? 0, documents: documents ?? 0, pending: pending ?? 0 });
+      setSystemOk(!e1 && !e1b && !e2 && !e3);
       setRecentDocs((recent as SopDocument[]) ?? []);
     }
     load();

@@ -38,9 +38,15 @@ export interface Profile {
   created_at: string;
 }
 
+/** 'carrier' = insurance company. 'ams' = Agency Management System - agency
+ *  software, not an insurer, but stored the same way (see the migration
+ *  comment) so it reuses the exact same SOP upload/search/analytics pipeline. */
+export type CompanySourceType = 'carrier' | 'ams';
+
 export interface InsuranceCompany {
   id: string;
   name: string;
+  type: CompanySourceType;
   created_at: string;
 }
 

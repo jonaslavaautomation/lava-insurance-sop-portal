@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, EyeOff } from 'lucide-react';
-import { supabase, type InsuranceCompany, type SopStep } from '@/lib/supabase';
+import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, EyeOff, Building2, Server } from 'lucide-react';
+import { supabase, type InsuranceCompany, type CompanySourceType, type SopStep } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
 import { StepsViewer } from '@/components/StepsViewer';
 import { ImageRedactor } from '@/components/ImageRedactor';
@@ -14,6 +14,7 @@ export default function AdminUpload() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [sourceType, setSourceType] = useState<CompanySourceType>('carrier');
 
   const [companyId, setCompanyId] = useState('');
   const [title, setTitle] = useState('');
@@ -57,11 +58,24 @@ export default function AdminUpload() {
     async function load() {
       const { data } = await supabase.from('insurance_companies').select('*').order('name');
       setCompanies(data ?? []);
-      if (data && data.length > 0) setCompanyId(data[0].id);
       setLoading(false);
     }
     load();
   }, []);
+
+  // Carriers and AMS platforms are both rows of `insurance_companies`
+  // (see the AMS migration) - just filtered here by which one the admin
+  // is uploading for.
+  const filteredCompanies = useMemo(() => companies.filter((c) => c.type === sourceType), [companies, sourceType]);
+
+  useEffect(() => {
+    if (filteredCompanies.length > 0 && !filteredCompanies.some((c) => c.id === companyId)) {
+      setCompanyId(filteredCompanies[0].id);
+    } else if (filteredCompanies.length === 0) {
+      setCompanyId('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredCompanies]);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -95,7 +109,7 @@ export default function AdminUpload() {
     setError(null);
     setSuccess(false);
 
-    if (!companyId) { setError('Please select an insurance company.'); return; }
+    if (!companyId) { setError(sourceType === 'ams' ? 'Please select an AMS.' : 'Please select an insurance company.'); return; }
     if (!title.trim()) { setError('Please enter a title.'); return; }
     if (!content.trim()) { setError('Please provide SOP content (paste text or upload a text file).'); return; }
     if (!allImagesReviewed) { setError('Please review every screenshot for sensitive info before uploading.'); return; }
@@ -153,7 +167,7 @@ export default function AdminUpload() {
     return (
       <div className="p-8">
         <h1 className="text-3xl font-bold text-slate-50 mb-1">Upload SOP</h1>
-        <div className="mt-8"><ErrorState message="You need to add an insurance company before uploading SOPs." /></div>
+        <div className="mt-8"><ErrorState message="You need to add an insurance company or an AMS before uploading SOPs." /></div>
       </div>
     );
   }
@@ -180,10 +194,46 @@ export default function AdminUpload() {
 
       <form onSubmit={handleSubmit} className="bg-[#121723]/80 rounded-xl border border-white/[0.08] p-6 space-y-6">
         <div>
-          <label className={labelClass}>Insurance Company</label>
-          <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={inputClass}>
-            {companies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
-          </select>
+          <label className={labelClass}>SOP Source</label>
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setSourceType('carrier')}
+              className={`flex-1 h-11 flex items-center justify-center gap-2 rounded-lg border text-sm font-medium transition-colors ${
+                sourceType === 'carrier'
+                  ? 'bg-brand-600/15 border-brand-500/40 text-brand-400'
+                  : 'border-white/10 text-slate-400 hover:text-slate-200 hover:border-white/20'
+              }`}
+            >
+              <Building2 className="w-4 h-4" /> Insurance Carrier
+            </button>
+            <button
+              type="button"
+              onClick={() => setSourceType('ams')}
+              className={`flex-1 h-11 flex items-center justify-center gap-2 rounded-lg border text-sm font-medium transition-colors ${
+                sourceType === 'ams'
+                  ? 'bg-brand-600/15 border-brand-500/40 text-brand-400'
+                  : 'border-white/10 text-slate-400 hover:text-slate-200 hover:border-white/20'
+              }`}
+            >
+              <Server className="w-4 h-4" /> AMS
+            </button>
+          </div>
+
+          {filteredCompanies.length === 0 ? (
+            <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
+              {sourceType === 'ams'
+                ? <>No AMS platforms yet — add one on the <a href="/admin/ams" className="underline hover:text-amber-300">AMS</a> page first.</>
+                : <>No insurance companies yet — add one on the <a href="/admin/companies" className="underline hover:text-amber-300">Insurance Companies</a> page first.</>}
+            </p>
+          ) : (
+            <>
+              <label className={labelClass}>{sourceType === 'ams' ? 'AMS' : 'Insurance Company'}</label>
+              <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className={inputClass}>
+                {filteredCompanies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
+              </select>
+            </>
+          )}
         </div>
 
         <div>
@@ -346,7 +396,7 @@ export default function AdminUpload() {
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={submitting || parsing || !allImagesReviewed}
+            disabled={submitting || parsing || !allImagesReviewed || !companyId}
             title={!allImagesReviewed ? 'Review every screenshot for sensitive info first' : undefined}
             className="h-11 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium px-5 rounded-lg transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4),0_0_16px_-4px_rgba(255,42,95,0.6)] disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
           >

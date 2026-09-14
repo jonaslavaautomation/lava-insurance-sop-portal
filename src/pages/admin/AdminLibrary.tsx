@@ -12,6 +12,7 @@ export default function AdminLibrary() {
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterType, setFilterType] = useState<'all' | 'carrier' | 'ams'>('all');
   const [activeCategory, setActiveCategory] = useState('ALL');
 
   useEffect(() => {
@@ -44,8 +45,20 @@ export default function AdminLibrary() {
     return map;
   }, [companies]);
 
+  const companyTypeMap = useMemo(() => {
+    const map: Record<string, 'carrier' | 'ams'> = {};
+    companies.forEach((c) => { map[c.id] = c.type; });
+    return map;
+  }, [companies]);
+
+  const visibleCompanies = useMemo(
+    () => (filterType === 'all' ? companies : companies.filter((c) => c.type === filterType)),
+    [companies, filterType]
+  );
+
   const filtered = useMemo(() => {
     return documents.filter((doc) => {
+      if (filterType !== 'all' && companyTypeMap[doc.insurance_company_id] !== filterType) return false;
       if (filterCompany !== 'all' && doc.insurance_company_id !== filterCompany) return false;
       if (filterStatus !== 'all' && doc.status !== filterStatus) return false;
       if (activeCategory !== 'ALL' && doc.process_category !== activeCategory) return false;
@@ -57,7 +70,7 @@ export default function AdminLibrary() {
       }
       return true;
     });
-  }, [documents, filterCompany, filterStatus, activeCategory, search]);
+  }, [documents, filterType, companyTypeMap, filterCompany, filterStatus, activeCategory, search]);
 
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; icon: typeof CheckCircle; class: string }> = {
@@ -90,7 +103,7 @@ export default function AdminLibrary() {
       <p className="text-slate-500 text-base mb-6">Browse, search, and manage all SOP documents</p>
 
       <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
@@ -101,9 +114,18 @@ export default function AdminLibrary() {
               className="w-full h-11 pl-10 pr-3 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100 placeholder:text-slate-600"
             />
           </div>
+          <select
+            value={filterType}
+            onChange={(e) => { setFilterType(e.target.value as 'all' | 'carrier' | 'ams'); setFilterCompany('all'); }}
+            className="h-11 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200"
+          >
+            <option value="all" className="bg-ink-secondary">Carriers & AMS</option>
+            <option value="carrier" className="bg-ink-secondary">Carriers Only</option>
+            <option value="ams" className="bg-ink-secondary">AMS Only</option>
+          </select>
           <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="h-11 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200">
-            <option value="all" className="bg-ink-secondary">All Companies</option>
-            {companies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
+            <option value="all" className="bg-ink-secondary">All Sources</option>
+            {visibleCompanies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
           </select>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-11 px-3.5 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 text-sm text-slate-200">
             <option value="all" className="bg-ink-secondary">All Statuses</option>
@@ -141,7 +163,7 @@ export default function AdminLibrary() {
               <thead className="bg-white/[0.02] border-b border-white/[0.08]">
                 <tr>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">SOP Title</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden lg:table-cell">Carrier</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden lg:table-cell">Source</th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Category</th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5 hidden md:table-cell">Version</th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3.5">Status</th>
@@ -160,7 +182,12 @@ export default function AdminLibrary() {
                         <p className="font-medium text-slate-100 truncate max-w-[240px]">{doc.title}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{doc.line_of_business}</p>
                       </td>
-                      <td className="px-5 py-4 text-slate-400 hidden lg:table-cell">{companyMap[doc.insurance_company_id] ?? '—'}</td>
+                      <td className="px-5 py-4 text-slate-400 hidden lg:table-cell">
+                        <span>{companyMap[doc.insurance_company_id] ?? '—'}</span>
+                        {companyTypeMap[doc.insurance_company_id] === 'ams' && (
+                          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-sky-400 bg-sky-500/10 border border-sky-500/20 rounded-full px-1.5 py-0.5">AMS</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4 text-slate-400 hidden md:table-cell">{doc.process_category}</td>
                       <td className="px-5 py-4 text-slate-400 font-mono hidden md:table-cell">v{doc.version}</td>
                       <td className="px-5 py-4">{statusBadge(doc.status)}</td>
