@@ -1,18 +1,16 @@
 interface LavaLogoProps {
-  /** Size/shape classes. For variant="badge" these apply to the outer square (e.g. "w-10 h-10 rounded-xl"). */
+  /** Size/shape classes, e.g. "w-10 h-10 rounded-xl". */
   className?: string;
-  /** "mark" = red robot icon only. "badge" = icon on the dark LAVA square backdrop. */
+  /** "badge" (default) = the real LAVA logo file (robot mark + wordmark on
+   *  its own dark background). "mark" = a hand-drawn robot-icon-only SVG,
+   *  transparent, for spots where the wordmark would be illegible (kept
+   *  for that case even though nothing currently uses it). */
   variant?: 'mark' | 'badge';
 }
 
 const RED = '#E31E24';
 
-/**
- * The LAVA robot mark. Geometry here is the single source of truth — keep
- * public/favicon.svg's shapes numerically identical to this if it ever
- * changes, so the in-app logo, the browser favicon, and the social-share
- * image (scripts/generate-og-image.* ) never drift apart.
- */
+/** Hand-drawn fallback icon (no wordmark) - only used for variant="mark". */
 function RobotIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -36,9 +34,7 @@ export function LavaLogo({ className = 'w-9 h-9', variant = 'badge' }: LavaLogoP
     return <RobotIcon className={className} />;
   }
 
-  return (
-    <div className={`${className} bg-[#1C1C1F] flex items-center justify-center flex-shrink-0`}>
-      <RobotIcon className="w-[62%] h-[62%]" />
-    </div>
-  );
+  // The actual brand file (public/brand/lava-logo.png), not a redrawn
+  // approximation - same asset used everywhere else the LAVA logo appears.
+  return <img src="/brand/lava-logo.png" alt="LAVA Automation" className={`${className} object-cover flex-shrink-0`} />;
 }
