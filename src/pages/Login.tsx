@@ -21,11 +21,13 @@ export default function Login() {
     setError(null);
     setGoogleLoading(true);
     const { error } = await signInWithGoogle();
-    // Only reachable if the redirect to Google itself failed — a successful
-    // call navigates the browser away before this line would matter.
+    setGoogleLoading(false);
     if (error) {
       setError(error);
-      setGoogleLoading(false);
+    } else {
+      // The popup already established the session (see AuthContext) - this
+      // tab never navigated away, so head into the app now.
+      navigate('/admin');
     }
   }
 
