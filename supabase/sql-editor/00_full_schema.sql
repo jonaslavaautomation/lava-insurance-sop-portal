@@ -63,10 +63,11 @@ CREATE POLICY "profiles_insert_admin" ON profiles
   WITH CHECK (is_admin());
 
 -- Trigger: auto-create profile on signup.
--- jonas@lavaautomation.com and andy@lavaautomation.com are the only emails
--- auto-promoted to admin; everyone else (Google/Gmail sign-ins included,
--- even other @lavaautomation.com accounts) starts as va_student and must
--- be promoted manually (see promote_to_admin.sql).
+-- jonas@lavaautomation.com, andy@lavaautomation.com and
+-- martin@lavaautomation.com are the only emails auto-promoted to admin;
+-- everyone else (Google/Gmail sign-ins included, even other
+-- @lavaautomation.com accounts) starts as va_student and must be
+-- promoted manually (see promote_to_admin.sql).
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -80,7 +81,11 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
     CASE
-      WHEN lower(NEW.email) IN ('jonas@lavaautomation.com', 'andy@lavaautomation.com')
+      WHEN lower(NEW.email) IN (
+        'jonas@lavaautomation.com',
+        'andy@lavaautomation.com',
+        'martin@lavaautomation.com'
+      )
         THEN 'admin'
       ELSE 'va_student'
     END
