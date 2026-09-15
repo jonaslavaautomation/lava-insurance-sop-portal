@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp } from 'lucide-react';
+import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check } from 'lucide-react';
 import { supabase, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopEngagement } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
+import { CarrierLogo } from '@/components/CarrierLogo';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { useAuth } from '@/context/AuthContext';
@@ -244,14 +245,36 @@ export default function VAPortal() {
                   <p className="text-xs text-slate-500">{category === 'ams' ? 'Choose the AMS platform to search within' : 'Choose the company to search within'}</p>
                 </div>
               </div>
-              <select
-                value={selectedCompany}
-                onChange={(e) => { setSelectedCompany(e.target.value); setHasSearched(false); setResults([]); }}
-                className="w-full px-3.5 py-2.5 rounded-md border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
-              >
-                <option value="" className="bg-ink-secondary">{category === 'ams' ? 'Select an AMS...' : 'Select an insurance company...'}</option>
-                {visibleCompanies.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
-              </select>
+              {visibleCompanies.length === 0 ? (
+                <p className="text-sm text-slate-500 py-4 text-center">
+                  {category === 'ams' ? 'No AMS platforms added yet.' : 'No insurance companies added yet.'}
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {visibleCompanies.map((c) => {
+                    const isSelected = selectedCompany === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => { setSelectedCompany(c.id); setHasSearched(false); setResults([]); }}
+                        className={`relative flex flex-col items-center gap-2.5 rounded-lg border p-4 text-center transition-all ${
+                          isSelected
+                            ? 'border-brand-500 bg-brand-500/[0.08] ring-1 ring-brand-500/50'
+                            : 'border-white/[0.08] bg-white/[0.02] hover:border-white/[0.2] hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 w-4 h-4 bg-brand-500 rounded-full flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        )}
+                        <CarrierLogo name={c.name} size={48} />
+                        <p className="text-[13px] font-medium text-slate-100 leading-tight">{c.name}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {selectedCompany && (
