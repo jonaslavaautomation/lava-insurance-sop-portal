@@ -95,13 +95,33 @@ function detectNumberedSteps(pageBundles: PageBundle[]): SopStep[] | null {
   // How many of the final items came from each page, by re-running the same
   // split against the text accumulated through that page. Small documents
   // (a handful of pages), so re-splitting a few extra times is cheap.
+  //
+  // Both splitters need a minimum amount of accumulated text before they
+  // recognize anything at all (splitOnStepHeadings needs >=2 "Step N"
+  // headings; splitIntoListItems needs >=3 markers) — so split(cumulative)
+  // returns null for however many early pages it takes to cross that
+  // threshold. Their images can't just be dropped for those pages (that
+  // silently loses screenshots from any doc where the threshold isn't
+  // crossed on page 1) - they're held in `pendingImages` and folded into
+  // whichever page's images finally cross the threshold, so nothing gets
+  // discarded, it just becomes as imprecisely-placed as this heuristic
+  // already accepts elsewhere (see the multi-heading-per-page comment
+  // below).
   let cumulativeText = '';
   let prevCount = 0;
   const imageAtItemIndex = new Map<number, ExtractedImage>();
+  let pendingImages: ExtractedImage[] = [];
 
   for (const { text: pageText, images: pageImages } of pageBundles) {
     cumulativeText += (cumulativeText ? '\n\n' : '') + pageText;
-    const count = split(cumulativeText)?.length ?? prevCount;
+    const splitResult = split(cumulativeText);
+    if (!splitResult) {
+      pendingImages.push(...pageImages);
+      continue;
+    }
+    const count = splitResult.length;
+    const imagesThisRound = pendingImages.length > 0 ? [...pendingImages, ...pageImages] : pageImages;
+    pendingImages = [];
 
     if (usingStepHeadings) {
       // Step headings (unlike a flat numbered list) commonly cluster
@@ -118,20 +138,20 @@ function detectNumberedSteps(pageBundles: PageBundle[]): SopStep[] | null {
       // of the page, first image wins if there's more than one to choose
       // from (one step can only carry a single screenshot).
       let imgIdx = 0;
-      for (let s = prevCount; s < count && imgIdx < pageImages.length; s++, imgIdx++) {
-        imageAtItemIndex.set(s, pageImages[imgIdx]);
+      for (let s = prevCount; s < count && imgIdx < imagesThisRound.length; s++, imgIdx++) {
+        imageAtItemIndex.set(s, imagesThisRound[imgIdx]);
       }
       const openStep = count - 1;
-      for (; imgIdx < pageImages.length && openStep >= 0; imgIdx++) {
-        if (!imageAtItemIndex.has(openStep)) imageAtItemIndex.set(openStep, pageImages[imgIdx]);
+      for (; imgIdx < imagesThisRound.length && openStep >= 0; imgIdx++) {
+        if (!imageAtItemIndex.has(openStep)) imageAtItemIndex.set(openStep, imagesThisRound[imgIdx]);
       }
     } else {
       // Place this page's images at the end of its own item range, working
       // backwards so several images on one page stack correctly instead of
       // overwriting the same slot.
       let slot = count - 1;
-      for (let k = pageImages.length - 1; k >= 0 && slot >= prevCount; k--, slot--) {
-        imageAtItemIndex.set(slot, pageImages[k]);
+      for (let k = imagesThisRound.length - 1; k >= 0 && slot >= prevCount; k--, slot--) {
+        imageAtItemIndex.set(slot, imagesThisRound[k]);
       }
     }
     prevCount = count;

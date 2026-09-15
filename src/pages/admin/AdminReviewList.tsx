@@ -2,21 +2,29 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileCheck, Clock, Eye, ArrowRight } from 'lucide-react';
 import { supabase, type SopDocument, type InsuranceCompany } from '@/lib/supabase';
-import { EmptyState, LoadingState } from '@/components/admin/DataStates';
+import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 
 export default function AdminReviewList() {
   const [documents, setDocuments] = useState<SopDocument[]>([]);
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const { data: docs } = await supabase
+      setError(null);
+      const { data: docs, error: docsError } = await supabase
         .from('sop_documents')
         .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
-      const { data: comps } = await supabase.from('insurance_companies').select('*').order('name');
+      const { data: comps, error: compsError } = await supabase.from('insurance_companies').select('*').order('name');
+      const firstError = docsError ?? compsError;
+      if (firstError) {
+        setError(firstError.message);
+        setLoading(false);
+        return;
+      }
       setDocuments(docs ?? []);
       setCompanies(comps ?? []);
       setLoading(false);
@@ -32,9 +40,11 @@ export default function AdminReviewList() {
       <h1 className="text-3xl font-bold text-slate-50 mb-1">Pending Reviews</h1>
       <p className="text-slate-500 text-base mb-8">SOP documents awaiting your review and approval</p>
 
+      {error && <div className="mb-6"><ErrorState message={error} /></div>}
+
       {loading ? (
         <LoadingState label="Loading pending reviews..." />
-      ) : documents.length === 0 ? (
+      ) : error ? null : documents.length === 0 ? (
         <EmptyState icon={FileCheck} title="No pending reviews" description="All SOPs are up to date." />
       ) : (
         <div className="space-y-4">

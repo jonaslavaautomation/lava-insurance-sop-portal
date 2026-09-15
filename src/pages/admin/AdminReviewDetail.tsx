@@ -56,18 +56,38 @@ export default function AdminReviewDetail() {
 
     // Save edited content (steps-based SOPs are read-only here for now —
     // there's no per-step editor yet, so never overwrite their steps json).
+    // Every write below is checked and aborts the whole action on failure —
+    // previously only the final status update's error was checked, so a
+    // failed content save or version write could silently be dropped while
+    // the SOP still got marked published, with no indication anything went
+    // wrong.
     if (content?.content_type !== 'steps' && editableContent !== content?.content) {
-      await supabase.from('sop_content').update({ content: editableContent }).eq('sop_document_id', id);
+      const { error: contentError } = await supabase.from('sop_content').update({ content: editableContent }).eq('sop_document_id', id);
+      if (contentError) {
+        setError(`Could not save your content edits: ${contentError.message}`);
+        setActionLoading(false);
+        return;
+      }
     }
 
     // If publishing, archive any currently-published versions of this doc
     if (status === 'published') {
-      await supabase.from('sop_versions').update({ status: 'archived' }).eq('sop_document_id', id).eq('status', 'published');
-      await supabase.from('sop_versions').insert({
+      const { error: archiveError } = await supabase.from('sop_versions').update({ status: 'archived' }).eq('sop_document_id', id).eq('status', 'published');
+      if (archiveError) {
+        setError(`Could not archive the previous version: ${archiveError.message}`);
+        setActionLoading(false);
+        return;
+      }
+      const { error: versionError } = await supabase.from('sop_versions').insert({
         sop_document_id: id,
         version: doc?.version ?? '1.0',
         status: 'published',
       });
+      if (versionError) {
+        setError(`Could not record the new version: ${versionError.message}`);
+        setActionLoading(false);
+        return;
+      }
     }
 
     const { error: updateError } = await supabase.from('sop_documents').update({ status, updated_at: new Date().toISOString() }).eq('id', id);

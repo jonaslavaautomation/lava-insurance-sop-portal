@@ -6,6 +6,13 @@ export interface AutoRedactResult {
   redactedDataUrl: string;
   /** What was found/redacted, for the "3 items auto-redacted" summary UI. */
   regions: DetectedRegion[];
+  /** True if OCR itself errored (corrupt image, worker/lang-pack load
+   *  failure, etc.) - the image was never actually scanned, so `regions`
+   *  being empty here means "we don't know", NOT "nothing sensitive was
+   *  found". Callers must show this differently from a genuine clean scan
+   *  (see AdminUpload's "Scan failed" vs "Clean" badge) so an admin isn't
+   *  told a screenshot is clean when it was simply never checked. */
+  scanFailed: boolean;
 }
 
 /**
@@ -76,7 +83,8 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
  * If OCR fails (e.g. a corrupt image) this fails open to the *original*
  * image with zero regions rather than throwing — the admin still sees
  * and can review it, same as before this existed, instead of the upload
- * silently breaking.
+ * silently breaking. `scanFailed: true` is how a caller tells that apart
+ * from a genuine clean scan (0 regions because OCR ran and found nothing).
  */
 export async function autoRedactImage(dataUrl: string): Promise<AutoRedactResult> {
   const [Tesseract, { detectSensitiveRegions }, img] = await Promise.all([
@@ -86,6 +94,7 @@ export async function autoRedactImage(dataUrl: string): Promise<AutoRedactResult
   ]);
 
   let regions: DetectedRegion[] = [];
+  let scanFailed = false;
   try {
     const worker = await Tesseract.createWorker('eng');
     // { blocks: true } is required — without it, data.blocks comes back
@@ -97,17 +106,18 @@ export async function autoRedactImage(dataUrl: string): Promise<AutoRedactResult
     regions = detectSensitiveRegions(lines);
   } catch (err) {
     console.error('Automatic OCR scan failed for a screenshot:', err);
+    scanFailed = true;
   }
 
   if (regions.length === 0) {
-    return { redactedDataUrl: dataUrl, regions };
+    return { redactedDataUrl: dataUrl, regions, scanFailed };
   }
 
   const canvas = document.createElement('canvas');
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { redactedDataUrl: dataUrl, regions: [] };
+  if (!ctx) return { redactedDataUrl: dataUrl, regions: [], scanFailed };
   ctx.drawImage(img, 0, 0);
 
   const pad = 3;
@@ -115,5 +125,5 @@ export async function autoRedactImage(dataUrl: string): Promise<AutoRedactResult
     pixelateRegion(ctx, img, img.naturalWidth, img.naturalHeight, r.x0 - pad, r.y0 - pad, r.x1 - r.x0 + pad * 2, r.y1 - r.y0 + pad * 2);
   }
 
-  return { redactedDataUrl: canvas.toDataURL('image/png'), regions };
+  return { redactedDataUrl: canvas.toDataURL('image/png'), regions, scanFailed };
 }

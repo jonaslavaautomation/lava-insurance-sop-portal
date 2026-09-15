@@ -2,13 +2,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, FileText, Eye, ThumbsUp, Archive, CheckCircle, Clock } from 'lucide-react';
 import { supabase, type SopDocument, type InsuranceCompany, type SopEngagement } from '@/lib/supabase';
-import { EmptyState, LoadingState } from '@/components/admin/DataStates';
+import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 
 export default function AdminLibrary() {
   const [documents, setDocuments] = useState<SopDocument[]>([]);
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [engagement, setEngagement] = useState<Record<string, SopEngagement>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -17,11 +18,22 @@ export default function AdminLibrary() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: docs }, { data: comps }, { data: eng }] = await Promise.all([
+      setError(null);
+      const [
+        { data: docs, error: docsError },
+        { data: comps, error: compsError },
+        { data: eng, error: engError },
+      ] = await Promise.all([
         supabase.from('sop_documents').select('*').order('created_at', { ascending: false }),
         supabase.from('insurance_companies').select('*').order('name'),
         supabase.rpc('get_sop_engagement', { p_sop_ids: null, p_since: null }),
       ]);
+      const firstError = docsError ?? compsError ?? engError;
+      if (firstError) {
+        setError(firstError.message);
+        setLoading(false);
+        return;
+      }
       setDocuments(docs ?? []);
       setCompanies(comps ?? []);
       const map: Record<string, SopEngagement> = {};
@@ -152,10 +164,12 @@ export default function AdminLibrary() {
         </div>
       </div>
 
+      {error && <div className="mb-6"><ErrorState message={error} /></div>}
+
       <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl overflow-hidden">
         {loading ? (
           <LoadingState label="Loading SOP library..." />
-        ) : filtered.length === 0 ? (
+        ) : error ? null : filtered.length === 0 ? (
           <EmptyState icon={FileText} title="No SOPs found" description="Try adjusting your filters, or upload a new SOP." />
         ) : (
           <div className="overflow-x-auto">

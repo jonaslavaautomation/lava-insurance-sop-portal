@@ -209,6 +209,20 @@ function normalize(word: string): string {
   return word.toLowerCase().replace(/[^a-z]/g, '');
 }
 
+/** True if an "SSN"/"Social Security" phrase appears ANYWHERE in this line
+ *  (unlike matchLabelAt, no delimiter or position requirement) - used only
+ *  as a low-risk contextual gate for the bare-digit SSN check below, not to
+ *  locate the value itself. */
+function lineHasSsnContext(words: { text: string }[]): boolean {
+  for (let i = 0; i < words.length; i++) {
+    const one = normalize(words[i].text);
+    if (one === 'ssn') return true;
+    const two = i + 1 < words.length ? `${one} ${normalize(words[i + 1].text)}` : '';
+    if (two === 'social security') return true;
+  }
+  return false;
+}
+
 /** Tries to match a label phrase starting at word index `start`. Returns the
  *  reason and how many words the label itself consumed, or null. */
 function matchLabelAt(words: { text: string }[], start: number): { reason: string; length: number } | null {
@@ -347,6 +361,25 @@ export function detectSensitiveRegions(lines: OcrLine[]): DetectedRegion[] {
     }
   }
 
+  // Bare SSN (no dashes - OCR sometimes drops them, or it's just typed as
+  // one 9-digit run): unlike the Luhn/ABA-checked digit runs above, SSNs
+  // have no checksum, so a random 9-digit number (a policy/account/
+  // reference number, say) isn't safely distinguishable from a real one -
+  // this only fires on a line that also mentions "SSN"/"Social Security",
+  // same contextual-gate pattern as the bare-ZIP check just above.
+  for (const words of lineWords) {
+    if (!lineHasSsnContext(words)) continue;
+    for (let i = 0; i < words.length; i++) {
+      for (let span = 1; span <= 3 && i + span <= words.length; span++) {
+        const group = words.slice(i, i + span);
+        const digits = group.map((g) => g.text).join('').replace(/[ -]/g, '');
+        if (/^\d{9}$/.test(digits)) {
+          regions.push({ ...union(group.map((g) => g.bbox)), reason: 'SSN' });
+        }
+      }
+    }
+  }
+
   return mergeOverlapping(regions);
 }
 
@@ -453,7 +486,8 @@ export function scanTextForSensitiveInfo(text: string): TextMatch[] {
   const lines = tokenizeText(text);
   const matches: TextMatch[] = [];
 
-  for (const tokens of lines) {
+  for (let li = 0; li < lines.length; li++) {
+    const tokens = lines[li];
     for (const t of tokens) {
       const clean = t.text.replace(/[,;]+$/, '');
       const trimmedEnd = t.start + clean.length;
@@ -482,6 +516,22 @@ export function scanTextForSensitiveInfo(text: string): TextMatch[] {
       }
     }
 
+    // Bare SSN (no dashes): same contextual gate as the OCR scanner's
+    // version above - SSNs have no checksum, so this only fires on a line
+    // that also mentions "SSN"/"Social Security" (see lineHasSsnContext).
+    if (lineHasSsnContext(tokens)) {
+      for (let i = 0; i < tokens.length; i++) {
+        for (let span = 1; span <= 3 && i + span <= tokens.length; span++) {
+          const group = tokens.slice(i, i + span);
+          const digits = group.map((g) => g.text).join('').replace(/[ -]/g, '');
+          if (/^\d{9}$/.test(digits)) {
+            const u = textUnion(group);
+            matches.push({ ...u, text: text.slice(u.start, u.end), reason: 'SSN' });
+          }
+        }
+      }
+    }
+
     for (let i = 0; i < tokens.length; i++) {
       const match = matchLabelAt(tokens, i);
       if (!match) continue;
@@ -500,6 +550,24 @@ export function scanTextForSensitiveInfo(text: string): TextMatch[] {
         if (innerMatch && labelHasDelimiter(tokens, text, j, innerMatch.length)) break;
         valueTokens.push(tokens[j]);
       }
+
+      // Narrative fields (loss details, adjuster notes, settlement amount,
+      // diagnosis) often wrap onto the next line or two in real SOP text -
+      // absorb those too, same as the OCR/image scanner does (see
+      // MULTILINE_REASONS above), instead of only catching the label's own
+      // line and leaving the rest of the narrative unredacted.
+      if (MULTILINE_REASONS.has(match.reason)) {
+        let extraLines = 0;
+        let nextLi = li + 1;
+        while (nextLi < lines.length && extraLines < MAX_CONTINUATION_LINES) {
+          const nextTokens = lines[nextLi];
+          if (nextTokens.length === 0 || matchLabelAt(nextTokens, 0)) break;
+          valueTokens.push(...nextTokens);
+          nextLi++;
+          extraLines++;
+        }
+      }
+
       if (valueTokens.length > 0) {
         const u = textUnion(valueTokens);
         matches.push({ ...u, text: text.slice(u.start, u.end), reason: match.reason });

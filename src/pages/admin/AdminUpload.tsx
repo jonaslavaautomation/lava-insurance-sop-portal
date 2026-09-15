@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, ScanEye, Building2, Server } from 'lucide-react';
+import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, ScanEye, Building2, Server, AlertTriangle } from 'lucide-react';
 import { supabase, type InsuranceCompany, type CompanySourceType, type SopStep } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
 import { autoRedactImage } from '@/lib/autoRedactImage';
@@ -8,6 +8,7 @@ import { StepsViewer } from '@/components/StepsViewer';
 import { ImageRedactor } from '@/components/ImageRedactor';
 import { ErrorState, LoadingState } from '@/components/admin/DataStates';
 import { SensitiveTextScanner } from '@/components/admin/SensitiveTextScanner';
+import { StepsSensitiveTextScanner } from '@/components/admin/StepsSensitiveTextScanner';
 
 export default function AdminUpload() {
   const navigate = useNavigate();
@@ -38,7 +39,17 @@ export default function AdminUpload() {
   // index -> how many sensitive regions the automatic pass found/redacted
   // on that screenshot (0 = scanned, nothing found).
   const [redactionCounts, setRedactionCounts] = useState<Record<number, number>>({});
+  // index -> true if OCR itself errored for that screenshot (corrupt image,
+  // worker load failure, etc.) - kept separate from redactionCounts so a
+  // failed scan never renders as indistinguishable from a genuine "Clean"
+  // (0 found) result; see the comment on AutoRedactResult.scanFailed.
+  const [scanFailures, setScanFailures] = useState<Record<number, boolean>>({});
   const [redactorIndex, setRedactorIndex] = useState<number | null>(null);
+  // Bumped on every new file selection so a slow auto-redaction pass from a
+  // PREVIOUS file (still running when the admin picks a second file before
+  // it finishes) can tell it's stale and bail out instead of splicing its
+  // results into the new file's images/steps once it finally resolves.
+  const uploadGeneration = useRef(0);
 
   // Unified view of "images that came out of this upload" — whichever
   // source they're in (steps or flat images) — always the current
@@ -73,25 +84,37 @@ export default function AdminUpload() {
   // pixelated mosaic over just those spots, automatically. No click
   // required; the admin can still open any thumbnail afterward to review
   // or fully redo it (see originalImages/originalSteps above).
-  async function autoRedactAll(extractedImages: ExtractedImage[], extractedSteps: SopStep[] | null) {
+  async function autoRedactAll(extractedImages: ExtractedImage[], extractedSteps: SopStep[] | null, generation: number) {
     const targets = extractedSteps && extractedSteps.length > 0
       ? extractedSteps.map((s, i) => ({ index: i, dataUrl: s.imageUrl })).filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
       : extractedImages.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
 
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      // Still resolve the flag for OUR generation — otherwise a still-in-
+      // flight scan from a previous file could leave `autoRedacting` stuck
+      // on true forever once this (image-less) generation becomes current.
+      if (generation === uploadGeneration.current) setAutoRedacting(false);
+      return;
+    }
 
     setAutoRedacting(true);
     const results = await Promise.all(
       targets.map(async (t) => {
         try {
-          const { redactedDataUrl, regions } = await autoRedactImage(t.dataUrl);
-          return { index: t.index, redactedDataUrl, count: regions.length };
+          const { redactedDataUrl, regions, scanFailed } = await autoRedactImage(t.dataUrl);
+          return { index: t.index, redactedDataUrl, count: regions.length, scanFailed };
         } catch (err) {
           console.error('Automatic redaction failed for a screenshot:', err);
-          return { index: t.index, redactedDataUrl: t.dataUrl, count: 0 };
+          return { index: t.index, redactedDataUrl: t.dataUrl, count: 0, scanFailed: true };
         }
       })
     );
+
+    // A newer file was selected while this scan was running - these
+    // results belong to the file that's no longer on screen. Applying them
+    // now would splice one file's redacted screenshots into another file's
+    // steps/images (see the comment on uploadGeneration above).
+    if (generation !== uploadGeneration.current) return;
 
     if (extractedSteps && extractedSteps.length > 0) {
       setSteps((prev) => {
@@ -109,6 +132,7 @@ export default function AdminUpload() {
     }
 
     setRedactionCounts(Object.fromEntries(results.map((r) => [r.index, r.count])));
+    setScanFailures(Object.fromEntries(results.map((r) => [r.index, r.scanFailed])));
     setAutoRedacting(false);
   }
 
@@ -138,6 +162,16 @@ export default function AdminUpload() {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // A pathologically large PDF gets fully loaded into memory and every
+    // page rendered to a canvas for image extraction - with no cap, one
+    // huge file could hang or crash the tab mid-scan. 50MB comfortably
+    // covers any real SOP document.
+    if (file.size > 50 * 1024 * 1024) {
+      setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(0)}MB, which is over the 50MB limit. Split it into smaller documents or export a lighter-weight PDF.`);
+      e.target.value = '';
+      return;
+    }
+    const generation = ++uploadGeneration.current;
     setError(null);
     setFileName(file.name);
     setParsing(true);
@@ -152,21 +186,25 @@ export default function AdminUpload() {
       setSteps(extractedSteps ?? null);
       setOriginalImages(extractedImages);
       setOriginalSteps(extractedSteps ?? null);
-      setRedactionCounts({});
+      setRedactionCounts({}); setScanFailures({});
       // Runs in the background — parsing is done, so the form is usable
       // immediately; the screenshot grid below shows its own "scanning" state
       // until this finishes.
-      void autoRedactAll(extractedImages, extractedSteps ?? null);
+      void autoRedactAll(extractedImages, extractedSteps ?? null, generation);
     } catch (err) {
+      // Only clear the form for the file that actually just failed - not
+      // if a newer selection has since superseded this one (same race the
+      // generation guard above protects against).
+      if (generation !== uploadGeneration.current) return;
       setError(err instanceof Error ? err.message : 'Could not read that file.');
       setFileName('');
       setImages([]);
       setSteps(null);
       setOriginalImages([]);
       setOriginalSteps(null);
-      setRedactionCounts({});
+      setRedactionCounts({}); setScanFailures({});
     } finally {
-      setParsing(false);
+      if (generation === uploadGeneration.current) setParsing(false);
     }
   }
 
@@ -385,18 +423,21 @@ export default function AdminUpload() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { setSteps(null); setImages([]); setOriginalSteps(null); setOriginalImages([]); setRedactionCounts({}); setFileName(''); setContent(''); }}
+                  onClick={() => { setSteps(null); setImages([]); setOriginalSteps(null); setOriginalImages([]); setRedactionCounts({}); setScanFailures({}); setFileName(''); setContent(''); }}
                   className="text-xs text-slate-500 hover:text-slate-300 mt-2"
                 >
                   Not right? Clear and paste text instead
                 </button>
+                <div className="mt-3">
+                  <StepsSensitiveTextScanner steps={steps} onChange={setSteps} />
+                </div>
               </div>
             ) : (
               <>
                 <p className="text-xs text-slate-600 text-center">or paste the SOP content below</p>
                 <textarea
                   value={content}
-                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setOriginalImages([]); setOriginalSteps(null); setRedactionCounts({}); }}
+                  onChange={(e) => { setContent(e.target.value); setFileName(''); setImages([]); setSteps(null); setOriginalImages([]); setOriginalSteps(null); setRedactionCounts({}); setScanFailures({}); }}
                   rows={12}
                   placeholder="Paste the full SOP document text here..."
                   className={`${textareaClass} font-mono resize-y`}
@@ -424,14 +465,21 @@ export default function AdminUpload() {
                 Scanning {reviewableImages.length} screenshot{reviewableImages.length !== 1 ? 's' : ''} for sensitive info…
               </div>
             )}
+            {!autoRedacting && Object.values(scanFailures).some(Boolean) && (
+              <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                Automatic scanning failed on one or more screenshots (marked below) — open each one to check it manually before publishing.
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {reviewableImages.map(({ index, dataUrl }) => {
                 const count = redactionCounts[index];
+                const failed = scanFailures[index];
                 return (
                   <div
                     key={index}
                     className={`relative rounded-lg border-2 overflow-hidden ${
-                      autoRedacting ? 'border-white/15' : count ? 'border-emerald-500/50' : 'border-white/15'
+                      autoRedacting ? 'border-white/15' : failed ? 'border-amber-500/60' : count ? 'border-emerald-500/50' : 'border-white/15'
                     }`}
                   >
                     <button type="button" onClick={() => setRedactorIndex(index)} className="block w-full">
@@ -441,19 +489,23 @@ export default function AdminUpload() {
                       className={`absolute top-1 right-1 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full pointer-events-none ${
                         autoRedacting
                           ? 'bg-white/20 text-slate-200'
-                          : count
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-white/20 text-slate-300'
+                          : failed
+                            ? 'bg-amber-500/25 text-amber-300'
+                            : count
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-white/20 text-slate-300'
                       }`}
                     >
                       {autoRedacting ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : failed ? (
+                        <AlertTriangle className="w-3 h-3" />
                       ) : count ? (
                         <ShieldCheck className="w-3 h-3" />
                       ) : (
                         <ScanEye className="w-3 h-3" />
                       )}
-                      {autoRedacting ? 'Scanning…' : count ? `${count} redacted` : 'Clean'}
+                      {autoRedacting ? 'Scanning…' : failed ? 'Scan failed' : count ? `${count} redacted` : 'Clean'}
                     </div>
                   </div>
                 );

@@ -15,7 +15,13 @@ export default function AdminCompanies() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('insurance_companies').select('*').eq('type', 'carrier').order('name');
+    setError(null);
+    const { data, error: loadError } = await supabase.from('insurance_companies').select('*').eq('type', 'carrier').order('name');
+    if (loadError) {
+      setError(loadError.message);
+      setLoading(false);
+      return;
+    }
     const companyList = data ?? [];
     setCompanies(companyList);
 
@@ -104,7 +110,7 @@ export default function AdminCompanies() {
 
       {loading ? (
         <LoadingState label="Loading companies..." />
-      ) : companies.length === 0 ? (
+      ) : error ? null : companies.length === 0 ? (
         <EmptyState icon={Building2} title="No insurance companies yet" description={'Click "Add Company" to get started.'} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

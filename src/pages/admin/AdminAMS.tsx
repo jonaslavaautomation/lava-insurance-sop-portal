@@ -23,7 +23,13 @@ export default function AdminAMS() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('insurance_companies').select('*').eq('type', 'ams').order('name');
+    setError(null);
+    const { data, error: loadError } = await supabase.from('insurance_companies').select('*').eq('type', 'ams').order('name');
+    if (loadError) {
+      setError(loadError.message);
+      setLoading(false);
+      return;
+    }
     const list = data ?? [];
     setSystems(list);
 
@@ -112,7 +118,7 @@ export default function AdminAMS() {
 
       {loading ? (
         <LoadingState label="Loading AMS platforms..." />
-      ) : systems.length === 0 ? (
+      ) : error ? null : systems.length === 0 ? (
         <EmptyState icon={Server} title="No AMS platforms yet" description={'Click "Add AMS" to get started.'} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

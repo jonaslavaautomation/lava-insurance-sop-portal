@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldAlert, ShieldCheck, Eraser } from 'lucide-react';
 import { scanTextForSensitiveInfo, type TextMatch } from '@/lib/detectSensitiveRegions';
 
@@ -18,6 +18,17 @@ interface Props {
  */
 export function SensitiveTextScanner({ content, onChange }: Props) {
   const [matches, setMatches] = useState<TextMatch[] | null>(null);
+
+  // `matches` holds character OFFSETS into `content` as of the last scan.
+  // If the admin keeps typing after scanning (the textarea isn't locked),
+  // those offsets go stale — clicking "Redact All" would then slice/insert
+  // at the wrong position in the NEW text, corrupting it instead of
+  // redacting the actual sensitive text. Forcing a fresh scan on any edit
+  // is simpler and safer than trying to re-map offsets through the edit.
+  useEffect(() => {
+    setMatches(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
 
   function scan() {
     setMatches(scanTextForSensitiveInfo(content));

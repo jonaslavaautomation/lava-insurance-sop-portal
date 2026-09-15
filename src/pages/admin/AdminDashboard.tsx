@@ -4,7 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { supabase, type EngagementDailyPoint } from '@/lib/supabase';
 import { KPICard, type TrendDirection } from '@/components/admin/KPICard';
 import { TelemetryPanel, type TelemetryEvent } from '@/components/admin/TelemetryPanel';
-import { LoadingState } from '@/components/admin/DataStates';
+import { ErrorState, LoadingState } from '@/components/admin/DataStates';
 
 type RangeDays = 7 | 30 | 90;
 
@@ -32,17 +32,19 @@ export default function AdminDashboard() {
   const [range, setRange] = useState<RangeDays>(30);
   const [telemetry, setTelemetry] = useState<TelemetryEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
+      setError(null);
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
       const [
-        { count: companies }, { count: companiesThisMonth },
-        { count: documents }, { count: documentsThisMonth },
-        { count: published }, { count: pending },
-        { data: engagement },
-        { data: dailyPoints },
+        companiesRes, companiesThisMonthRes,
+        documentsRes, documentsThisMonthRes,
+        publishedRes2, pendingRes,
+        engagementRes,
+        dailyPointsRes,
       ] = await Promise.all([
         supabase.from('insurance_companies').select('*', { count: 'exact', head: true }),
         supabase.from('insurance_companies').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
@@ -53,6 +55,22 @@ export default function AdminDashboard() {
         supabase.rpc('get_sop_engagement', { p_sop_ids: null, p_since: null }),
         supabase.rpc('get_engagement_daily', { p_days: 90 }),
       ]);
+      const { count: companies } = companiesRes;
+      const { count: companiesThisMonth } = companiesThisMonthRes;
+      const { count: documents } = documentsRes;
+      const { count: documentsThisMonth } = documentsThisMonthRes;
+      const { count: published } = publishedRes2;
+      const { count: pending } = pendingRes;
+      const { data: engagement } = engagementRes;
+      const { data: dailyPoints } = dailyPointsRes;
+
+      // Surface a genuine fetch failure instead of silently showing every
+      // KPI as 0, which reads as "there's really nothing here yet" rather
+      // than "the data couldn't load".
+      const firstError = [companiesRes, companiesThisMonthRes, documentsRes, documentsThisMonthRes, publishedRes2, pendingRes, engagementRes, dailyPointsRes]
+        .map((r) => r.error)
+        .find((e) => e);
+      if (firstError) setError(firstError.message);
 
       setStats({
         companies: companies ?? 0,
@@ -127,6 +145,8 @@ export default function AdminDashboard() {
           <p className="text-slate-500 text-base mt-1.5">Overview of your SOP knowledge base</p>
         </div>
       </div>
+
+      {error && <div className="mb-6"><ErrorState message={`Some dashboard data failed to load: ${error}`} /></div>}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <KPICard

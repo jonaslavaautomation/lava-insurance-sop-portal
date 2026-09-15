@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check } from 'lucide-react';
 import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement } from '@/lib/supabase';
@@ -38,13 +38,25 @@ export default function VAPortal() {
   const [selectedContent, setSelectedContent] = useState<SopContentDetail | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [engagement, setEngagement] = useState<Record<string, SopEngagement>>({});
   const [liked, setLiked] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
+  // Which document's content is the CURRENT open/close cycle waiting on —
+  // lets openResult tell a just-resolved but now-stale fetch (closed, then
+  // a different result opened, before the first fetch finished) apart from
+  // the one that's actually still relevant, so it doesn't overwrite a
+  // different SOP's already-displayed content.
+  const openRequestRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('insurance_companies').select('*').order('name');
+      const { data, error } = await supabase.from('insurance_companies').select('*').order('name');
+      if (error) {
+        setLoadError(error.message);
+        setLoading(false);
+        return;
+      }
       setCompanies(data ?? []);
       setLoading(false);
     }
@@ -138,8 +150,10 @@ export default function VAPortal() {
     setSelectedContent(null);
     setLiked(false);
 
+    openRequestRef.current = result.document_id;
     setContentLoading(true);
     void fetchSopContent(result.document_id).then((detail) => {
+      if (openRequestRef.current !== result.document_id) return; // superseded - discard
       setSelectedContent(detail);
       setContentLoading(false);
     });
@@ -222,7 +236,11 @@ export default function VAPortal() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        {loading ? null : !category ? (
+        {loading ? null : loadError ? (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm text-red-400">
+            Could not load carriers/AMS platforms: {loadError}. Try refreshing the page.
+          </div>
+        ) : !category ? (
           <div>
             <h2 className="text-base font-semibold text-slate-100 mb-1">What are you looking for?</h2>
             <p className="text-sm text-slate-500 mb-5">Choose a category to browse its approved SOPs</p>
