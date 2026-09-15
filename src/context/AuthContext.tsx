@@ -6,6 +6,8 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -57,6 +59,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Password sign-in/sign-up - for VAs who don't have a Google account.
+  // Role is decided entirely server-side (handle_new_user trigger); a
+  // password account can NEVER become admin just by matching one of the
+  // admin emails - that's gated on the sign-up actually coming from a
+  // verified Google identity (see the trigger + its migration comment).
+  // A password account always starts as va_student, full stop.
+  async function signIn(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message ?? null };
+  }
+
+  async function signUp(email: string, password: string, fullName: string) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    });
+    if (error) return { error: error.message, needsEmailConfirmation: false };
+    // If the Supabase project requires email confirmation, signUp()
+    // succeeds but returns no session yet - the caller needs to know this
+    // so it can show "check your email" instead of navigating in as if
+    // signed in.
+    return { error: null, needsEmailConfirmation: !data.session };
+  }
 
   // Opens Google sign-in in a small popup instead of navigating the whole
   // tab away - the main app never unmounts, so it comes back instantly
@@ -136,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

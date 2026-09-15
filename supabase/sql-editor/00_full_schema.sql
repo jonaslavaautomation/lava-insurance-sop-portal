@@ -91,9 +91,14 @@ CREATE TRIGGER trg_prevent_self_role_escalation
 -- jonas@lavaautomation.com, andy@lavaautomation.com,
 -- martin@lavaautomation.com, leo@lavaautomation.com,
 -- au@lavaautomation.com and shandyl.s@lavaautomation.com are the only
--- emails auto-promoted to admin; everyone else (Google/Gmail sign-ins
--- included, even other @lavaautomation.com accounts) starts as va_student
--- and must be promoted manually (see promote_to_admin.sql).
+-- emails auto-promoted to admin - AND ONLY when the sign-up came from a
+-- verified Google identity (raw_app_meta_data->>'provider' = 'google').
+-- Password sign-up is allowed (VAs without a Google account need a way
+-- in), but a password account using one of these exact emails still lands
+-- as va_student - it can only become admin by actually signing in with
+-- that Google account, or being promoted manually (see
+-- promote_to_admin.sql). Everyone else (any domain, any provider) starts
+-- as va_student too.
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -115,6 +120,7 @@ BEGIN
         'au@lavaautomation.com',
         'shandyl.s@lavaautomation.com'
       )
+        AND NEW.raw_app_meta_data->>'provider' = 'google'
         THEN 'admin'
       ELSE 'va_student'
     END
