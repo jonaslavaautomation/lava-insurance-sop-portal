@@ -25,9 +25,14 @@ export function ProtectedRoute({ children, adminOnly = false }: Props) {
 
   // Signing in (Google included) only proves who someone is, not that
   // they're an admin — new accounts default to va_student. Anyone who is
-  // authenticated but not an admin gets sent to the VA portal instead of
-  // the admin dashboard.
-  if (adminOnly && profile && profile.role !== 'admin') {
+  // authenticated but not (yet confirmed) an admin gets sent to the VA
+  // portal instead of the admin dashboard. Checking `!profile` too (not
+  // just an explicitly-non-admin profile) matters because AuthContext's
+  // `loading` should cover the profile fetch, but this is the fail-closed
+  // backstop if that profile fetch ever errors out and leaves `profile`
+  // permanently null — better to bounce to the VA portal than render the
+  // admin shell for a role we couldn't actually verify.
+  if (adminOnly && (!profile || profile.role !== 'admin')) {
     return <Navigate to="/portal" replace />;
   }
 

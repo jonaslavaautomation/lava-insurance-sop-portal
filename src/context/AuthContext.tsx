@@ -6,8 +6,6 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -44,33 +42,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
-        (async () => {
-          await loadProfile(session.user.id);
-        })();
+        // `loading` covers this too, not just the very first getSession()
+        // call above — without it, ProtectedRoute sees a truthy session
+        // with a still-null profile (e.g. right after Google sign-in) and,
+        // since it only gates on `loading`, would briefly treat an
+        // unverified-role user as authorized. See ProtectedRoute.tsx.
+        setLoading(true);
+        loadProfile(session.user.id).finally(() => setLoading(false));
       } else {
         setProfile(null);
+        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  async function signIn(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
-  }
-
-  async function signUp(email: string, password: string, fullName: string) {
-    // Role is decided entirely server-side (handle_new_user trigger, based on
-    // email) — this never grants admin itself. See supabase/sql-editor/
-    // 00_full_schema.sql for the single source of truth on who gets admin.
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-    return { error: error?.message ?? null };
-  }
 
   // Opens Google sign-in in a small popup instead of navigating the whole
   // tab away - the main app never unmounts, so it comes back instantly
@@ -150,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

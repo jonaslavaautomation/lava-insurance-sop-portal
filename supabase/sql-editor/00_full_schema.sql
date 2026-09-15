@@ -62,6 +62,31 @@ CREATE POLICY "profiles_insert_admin" ON profiles
   FOR INSERT TO authenticated
   WITH CHECK (is_admin());
 
+-- CRITICAL: profiles_update_own_or_admin (above) is a ROW-level check only
+-- - it lets a user update their own row, but doesn't restrict which
+-- COLUMNS, so without this trigger a signed-in va_student could set their
+-- own role to 'admin' directly (every is_admin() check just re-reads this
+-- column). This trigger enforces it in the database regardless of what
+-- the client sends.
+CREATE OR REPLACE FUNCTION prevent_self_role_escalation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role AND NOT is_admin() THEN
+    RAISE EXCEPTION 'Only an admin may change a profile''s role';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prevent_self_role_escalation ON profiles;
+CREATE TRIGGER trg_prevent_self_role_escalation
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION prevent_self_role_escalation();
+
 -- Trigger: auto-create profile on signup.
 -- jonas@lavaautomation.com, andy@lavaautomation.com and
 -- martin@lavaautomation.com are the only emails auto-promoted to admin;
