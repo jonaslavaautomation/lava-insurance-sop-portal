@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check } from 'lucide-react';
-import { supabase, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopEngagement } from '@/lib/supabase';
+import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { CarrierLogo } from '@/components/CarrierLogo';
 import { StepsViewer } from '@/components/StepsViewer';
@@ -32,6 +32,11 @@ export default function VAPortal() {
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  // The search results list only ever carries title/tags (see the comment
+  // on SearchResult) - the actual body (with embedded screenshots) is
+  // fetched separately, once, only for the one SOP a VA opens.
+  const [selectedContent, setSelectedContent] = useState<SopContentDetail | null>(null);
+  const [contentLoading, setContentLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [engagement, setEngagement] = useState<Record<string, SopEngagement>>({});
   const [liked, setLiked] = useState(false);
@@ -130,7 +135,14 @@ export default function VAPortal() {
   // the portal (they can also reach /portal via the "VA Portal" link).
   async function openResult(result: SearchResult) {
     setSelectedResult(result);
+    setSelectedContent(null);
     setLiked(false);
+
+    setContentLoading(true);
+    void fetchSopContent(result.document_id).then((detail) => {
+      setSelectedContent(detail);
+      setContentLoading(false);
+    });
 
     if (profile && profile.role !== 'admin') {
       const { error } = await supabase
@@ -424,7 +436,7 @@ export default function VAPortal() {
       </main>
 
       {selectedResult && (
-        <div className="fixed inset-0 bg-black/60 z-20 flex items-center justify-center p-4" onClick={() => setSelectedResult(null)}>
+        <div className="fixed inset-0 bg-black/60 z-20 flex items-center justify-center p-4" onClick={() => { setSelectedResult(null); setSelectedContent(null); }}>
           <div className="bg-ink-secondary border border-white/10 rounded-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between">
               <div>
@@ -459,15 +471,19 @@ export default function VAPortal() {
                   </button>
                 </div>
               </div>
-              <button onClick={() => setSelectedResult(null)} className="text-slate-500 hover:text-slate-200 p-1 rounded-md hover:bg-white/[0.06] transition-colors flex-shrink-0">
+              <button onClick={() => { setSelectedResult(null); setSelectedContent(null); }} className="text-slate-500 hover:text-slate-200 p-1 rounded-md hover:bg-white/[0.06] transition-colors flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="px-6 py-5 overflow-y-auto bg-white rounded-b-xl">
-              {selectedResult.content_type === 'steps' && selectedResult.steps ? (
-                <StepsViewer steps={selectedResult.steps} />
+              {contentLoading || !selectedContent ? (
+                <div className="text-center py-16">
+                  <Loader2 className="w-5 h-5 text-brand-500 animate-spin mx-auto" />
+                </div>
+              ) : selectedContent.content_type === 'steps' && selectedContent.steps ? (
+                <StepsViewer steps={selectedContent.steps} />
               ) : (
-                <DocumentViewer content={selectedResult.content} images={selectedResult.images} />
+                <DocumentViewer content={selectedContent.content} images={selectedContent.images} />
               )}
             </div>
           </div>

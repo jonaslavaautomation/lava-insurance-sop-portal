@@ -271,6 +271,13 @@ CREATE INDEX IF NOT EXISTS idx_sop_versions_doc ON sop_versions(sop_document_id)
 -- Uses ILIKE for flexible text matching on title, process_category, and content.
 -- Postgres won't let CREATE OR REPLACE change a function's output columns,
 -- so this always drops it first - safe since nothing else depends on it.
+-- Deliberately lightweight - only what the results LIST renders (title +
+-- a few tags). content/steps/images (which can carry several MB of
+-- embedded screenshots per SOP) are NOT returned here - shipping those for
+-- every matching row on every search was the real cause of slow search,
+-- since the query itself is cheap at this table size. The full body of one
+-- specific SOP is fetched separately, once, only when a VA opens it - see
+-- fetchSopContent() in src/lib/supabase.ts.
 DROP FUNCTION IF EXISTS search_sops(uuid, text);
 CREATE FUNCTION search_sops(
   p_company_id uuid,
@@ -282,10 +289,6 @@ RETURNS TABLE (
   line_of_business text,
   process_category text,
   version text,
-  content text,
-  content_type text,
-  steps jsonb,
-  images jsonb,
   insurance_company_name text
 )
 LANGUAGE sql
@@ -298,10 +301,6 @@ AS $$
     d.line_of_business,
     d.process_category,
     d.version,
-    c.content,
-    c.content_type,
-    c.steps,
-    c.images,
     ic.name
   FROM sop_documents d
   JOIN sop_content c ON c.sop_document_id = d.id

@@ -104,17 +104,41 @@ export interface SopDocumentWithCompany extends SopDocument {
   insurance_companies?: Pick<InsuranceCompany, 'id' | 'name'>;
 }
 
+// Deliberately lightweight - search_sops() no longer returns content/steps/
+// images (those can carry several MB of embedded screenshots per SOP each).
+// Sending that for every matching row on every search was the actual cause
+// of slow search - the results list only ever shows these fields. The full
+// body is fetched separately, once, only for the one SOP a VA opens - see
+// SopContentDetail / fetchSopContent below.
 export interface SearchResult {
   document_id: string;
   title: string;
   line_of_business: string;
   process_category: string;
   version: string;
+  insurance_company_name: string;
+}
+
+/** Full body of one SOP, fetched on demand when a VA opens it (not as part
+ *  of search results - see the comment on SearchResult). */
+export interface SopContentDetail {
   content: string;
   content_type: SopContentType;
   steps: SopStep[] | null;
   images: SopImage[] | null;
-  insurance_company_name: string;
+}
+
+export async function fetchSopContent(documentId: string): Promise<SopContentDetail | null> {
+  const { data, error } = await supabase
+    .from('sop_content')
+    .select('content, content_type, steps, images')
+    .eq('sop_document_id', documentId)
+    .maybeSingle();
+  if (error) {
+    console.error('fetchSopContent error:', error);
+    return null;
+  }
+  return data as SopContentDetail | null;
 }
 
 /** One "a VA opened this SOP" event. Append-only - never edited. */
