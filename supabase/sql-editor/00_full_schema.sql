@@ -179,16 +179,25 @@ CREATE TABLE IF NOT EXISTS sop_documents (
 
 ALTER TABLE sop_documents ENABLE ROW LEVEL SECURITY;
 
--- VA/Student: read published only; Admin: read all
+-- VA/Student: read published, or their own submission regardless of
+-- status (so they can track pending/published/rejected); Admin: read all
 DROP POLICY IF EXISTS "sop_docs_select" ON sop_documents;
 CREATE POLICY "sop_docs_select" ON sop_documents
   FOR SELECT TO authenticated
-  USING (status = 'published' OR is_admin());
+  USING (status = 'published' OR is_admin() OR uploaded_by = auth.uid());
 
 DROP POLICY IF EXISTS "sop_docs_insert_admin" ON sop_documents;
 CREATE POLICY "sop_docs_insert_admin" ON sop_documents
   FOR INSERT TO authenticated
   WITH CHECK (is_admin());
+
+-- VA/Student: may also submit their own SOP for review - but only as
+-- 'pending' and only attributing themselves. Additional/permissive
+-- alongside the admin policy above, not a replacement.
+DROP POLICY IF EXISTS "sop_docs_insert_own_pending" ON sop_documents;
+CREATE POLICY "sop_docs_insert_own_pending" ON sop_documents
+  FOR INSERT TO authenticated
+  WITH CHECK (status = 'pending' AND uploaded_by = auth.uid());
 
 DROP POLICY IF EXISTS "sop_docs_update_admin" ON sop_documents;
 CREATE POLICY "sop_docs_update_admin" ON sop_documents
@@ -225,7 +234,8 @@ CREATE TABLE IF NOT EXISTS sop_content (
 
 ALTER TABLE sop_content ENABLE ROW LEVEL SECURITY;
 
--- VA/Student: read content of published docs; Admin: read all
+-- VA/Student: read content of published docs, or their own submission's
+-- content regardless of status; Admin: read all
 DROP POLICY IF EXISTS "sop_content_select" ON sop_content;
 CREATE POLICY "sop_content_select" ON sop_content
   FOR SELECT TO authenticated
@@ -233,7 +243,7 @@ CREATE POLICY "sop_content_select" ON sop_content
     EXISTS (
       SELECT 1 FROM sop_documents
       WHERE sop_documents.id = sop_content.sop_document_id
-      AND (sop_documents.status = 'published' OR is_admin())
+      AND (sop_documents.status = 'published' OR is_admin() OR sop_documents.uploaded_by = auth.uid())
     )
   );
 
@@ -241,6 +251,21 @@ DROP POLICY IF EXISTS "sop_content_insert_admin" ON sop_content;
 CREATE POLICY "sop_content_insert_admin" ON sop_content
   FOR INSERT TO authenticated
   WITH CHECK (is_admin());
+
+-- VA/Student: may also insert content for their own pending submission -
+-- checked by walking back to the parent sop_documents row they just
+-- inserted (sop_docs_insert_own_pending, above).
+DROP POLICY IF EXISTS "sop_content_insert_own_pending" ON sop_content;
+CREATE POLICY "sop_content_insert_own_pending" ON sop_content
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM sop_documents
+      WHERE sop_documents.id = sop_content.sop_document_id
+      AND sop_documents.uploaded_by = auth.uid()
+      AND sop_documents.status = 'pending'
+    )
+  );
 
 DROP POLICY IF EXISTS "sop_content_update_admin" ON sop_content;
 CREATE POLICY "sop_content_update_admin" ON sop_content

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp, User } from 'lucide-react';
 import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement } from '@/lib/supabase';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
@@ -14,6 +14,7 @@ export default function AdminReviewDetail() {
   const [doc, setDoc] = useState<SopDocument | null>(null);
   const [content, setContent] = useState<SopContent | null>(null);
   const [company, setCompany] = useState<InsuranceCompany | null>(null);
+  const [submitterName, setSubmitterName] = useState<string | null>(null);
   const [versions, setVersions] = useState<SopVersion[]>([]);
   const [engagement, setEngagement] = useState<SopEngagement | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,14 @@ export default function AdminReviewDetail() {
 
         const { data: eng } = await supabase.rpc('get_sop_engagement', { p_sop_ids: [id] });
         setEngagement(((eng as SopEngagement[]) ?? [])[0] ?? null);
+
+        // Who actually submitted this - blank for an admin's own upload,
+        // shown for a VA's submission so it's clear at a glance whose work
+        // is being reviewed.
+        if (d.uploaded_by) {
+          const { data: submitter } = await supabase.from('profiles').select('full_name, email').eq('id', d.uploaded_by).maybeSingle();
+          if (submitter) setSubmitterName(submitter.full_name?.trim() || submitter.email);
+        }
       }
 
       setLoading(false);
@@ -169,6 +178,11 @@ export default function AdminReviewDetail() {
             <div className="flex items-center gap-5 mt-4 text-sm text-slate-400">
               <span className="flex items-center gap-1.5"><Eye className="w-4 h-4" /> {engagement?.view_count ?? 0} Views</span>
               <span className="flex items-center gap-1.5"><ThumbsUp className="w-4 h-4" /> {engagement?.like_count ?? 0} Likes</span>
+              {submitterName && (
+                <span className="flex items-center gap-1.5 text-sky-400">
+                  <User className="w-4 h-4" /> Submitted by {submitterName}
+                </span>
+              )}
             </div>
           </div>
         </div>

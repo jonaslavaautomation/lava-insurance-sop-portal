@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileCheck, Clock, Eye, ArrowRight } from 'lucide-react';
+import { FileCheck, Clock, Eye, ArrowRight, User } from 'lucide-react';
 import { supabase, type SopDocument, type InsuranceCompany } from '@/lib/supabase';
 import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 
 export default function AdminReviewList() {
   const [documents, setDocuments] = useState<SopDocument[]>([]);
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
+  // uploaded_by -> submitter's name, so a VA's own submission (vs an admin
+  // upload) is visible at a glance - who submitted it isn't in
+  // sop_documents itself, just the auth.users id, so this is a second
+  // lookup against profiles (same pattern as companyMap below).
+  const [submitterMap, setSubmitterMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +32,15 @@ export default function AdminReviewList() {
       }
       setDocuments(docs ?? []);
       setCompanies(comps ?? []);
+
+      const submitterIds = Array.from(new Set((docs ?? []).map((d) => d.uploaded_by).filter((id): id is string => !!id)));
+      if (submitterIds.length > 0) {
+        const { data: profilesData } = await supabase.from('profiles').select('id, full_name, email').in('id', submitterIds);
+        const map: Record<string, string> = {};
+        (profilesData ?? []).forEach((p) => { map[p.id] = p.full_name?.trim() || p.email; });
+        setSubmitterMap(map);
+      }
+
       setLoading(false);
     }
     load();
@@ -57,12 +71,17 @@ export default function AdminReviewList() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-base font-medium text-slate-100 truncate">{doc.title}</p>
-                    <div className="flex items-center gap-3 mt-1.5">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                       <span className="text-sm text-slate-500">{companyMap[doc.insurance_company_id] ?? '—'}</span>
                       <span className="text-sm text-slate-700">|</span>
                       <span className="text-sm text-slate-500">{doc.process_category}</span>
                       <span className="text-sm text-slate-700">|</span>
                       <span className="text-sm font-mono text-slate-500">v{doc.version}</span>
+                      {doc.uploaded_by && submitterMap[doc.uploaded_by] && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-sky-400 bg-sky-500/10 border border-sky-500/20 rounded-full px-2 py-0.5">
+                          <User className="w-3 h-3" /> {submitterMap[doc.uploaded_by]}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

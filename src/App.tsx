@@ -13,6 +13,7 @@ import AdminReviewList from '@/pages/admin/AdminReviewList';
 import AdminReviewDetail from '@/pages/admin/AdminReviewDetail';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import VAPortal from '@/pages/VAPortal';
+import VASubmitSOP from '@/pages/VASubmitSOP';
 
 function RootRedirect() {
   const { session, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
           </Route>
 
           <Route path="/portal" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
+          <Route path="/portal/submit" element={<ProtectedRoute><VASubmitSOP /></ProtectedRoute>} />
           <Route path="/portal/:category" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
           <Route path="/portal/:category/:companyId" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
 

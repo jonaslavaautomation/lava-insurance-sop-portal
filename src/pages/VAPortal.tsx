@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check } from 'lucide-react';
+import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus } from 'lucide-react';
 import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { CarrierLogo } from '@/components/CarrierLogo';
@@ -224,6 +224,13 @@ export default function VAPortal() {
               <p className="text-xs font-medium text-slate-300 truncate max-w-[180px]">{profile?.email}</p>
               <p className="text-[10px] text-slate-500">VA / Student Portal</p>
             </div>
+            <button
+              onClick={() => navigate('/portal/submit')}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-500 px-3 py-2 rounded-md transition-colors shadow-[0_0_0_1px_rgba(225,29,72,0.4)]"
+            >
+              <FilePlus className="w-3.5 h-3.5" />
+              Submit SOP
+            </button>
             <button
               onClick={handleSignOut}
               className="flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-100 px-3 py-2 rounded-md hover:bg-white/[0.06] transition-colors"
