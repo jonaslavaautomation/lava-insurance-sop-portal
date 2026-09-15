@@ -260,7 +260,17 @@ export default function VAPortal() {
                   <Building2 className="w-6 h-6 text-sky-400" />
                 </div>
                 <h3 className="text-base font-semibold text-slate-100">Insurance Carriers</h3>
-                <p className="text-sm text-slate-500 mt-1">{carrierCount} carrier{carrierCount !== 1 ? 's' : ''} available</p>
+                <p className="text-sm text-slate-500 mt-1 mb-3">{carrierCount} carrier{carrierCount !== 1 ? 's' : ''} available</p>
+                {carrierCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {companies.filter((c) => c.type === 'carrier').slice(0, 8).map((c) => (
+                      <CarrierLogo key={c.id} name={c.name} size={32} />
+                    ))}
+                    {carrierCount > 8 && (
+                      <span className="text-xs text-slate-500 font-medium">+{carrierCount - 8} more</span>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 text-brand-400 text-sm font-medium mt-4">
                   Browse <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </div>
@@ -273,7 +283,17 @@ export default function VAPortal() {
                   <Server className="w-6 h-6 text-emerald-400" />
                 </div>
                 <h3 className="text-base font-semibold text-slate-100">AMS</h3>
-                <p className="text-sm text-slate-500 mt-1">{amsCount} platform{amsCount !== 1 ? 's' : ''} available</p>
+                <p className="text-sm text-slate-500 mt-1 mb-3">{amsCount} platform{amsCount !== 1 ? 's' : ''} available</p>
+                {amsCount > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {companies.filter((c) => c.type === 'ams').slice(0, 8).map((c) => (
+                      <CarrierLogo key={c.id} name={c.name} size={32} />
+                    ))}
+                    {amsCount > 8 && (
+                      <span className="text-xs text-slate-500 font-medium">+{amsCount - 8} more</span>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 text-brand-400 text-sm font-medium mt-4">
                   Browse <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </div>
