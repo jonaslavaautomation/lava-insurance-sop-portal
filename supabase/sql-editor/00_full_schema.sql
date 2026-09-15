@@ -88,11 +88,12 @@ CREATE TRIGGER trg_prevent_self_role_escalation
   FOR EACH ROW EXECUTE FUNCTION prevent_self_role_escalation();
 
 -- Trigger: auto-create profile on signup.
--- jonas@lavaautomation.com, andy@lavaautomation.com and
--- martin@lavaautomation.com are the only emails auto-promoted to admin;
--- everyone else (Google/Gmail sign-ins included, even other
--- @lavaautomation.com accounts) starts as va_student and must be
--- promoted manually (see promote_to_admin.sql).
+-- jonas@lavaautomation.com, andy@lavaautomation.com,
+-- martin@lavaautomation.com, leo@lavaautomation.com,
+-- au@lavaautomation.com and shandyl.s@lavaautomation.com are the only
+-- emails auto-promoted to admin; everyone else (Google/Gmail sign-ins
+-- included, even other @lavaautomation.com accounts) starts as va_student
+-- and must be promoted manually (see promote_to_admin.sql).
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -109,7 +110,10 @@ BEGIN
       WHEN lower(NEW.email) IN (
         'jonas@lavaautomation.com',
         'andy@lavaautomation.com',
-        'martin@lavaautomation.com'
+        'martin@lavaautomation.com',
+        'leo@lavaautomation.com',
+        'au@lavaautomation.com',
+        'shandyl.s@lavaautomation.com'
       )
         THEN 'admin'
       ELSE 'va_student'
