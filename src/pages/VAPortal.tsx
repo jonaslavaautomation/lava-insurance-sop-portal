@@ -12,6 +12,25 @@ function isSourceType(value: string | undefined): value is CompanySourceType {
   return value === 'carrier' || value === 'ams';
 }
 
+// Hover tooltip shown over a carrier/AMS logo - name + how many published
+// SOPs it has. The parent element must have `relative group/logo` - a
+// NAMED group, deliberately, so hovering one logo doesn't also reveal
+// every other logo's tooltip when they all sit inside a bigger `group`
+// element (e.g. the whole category card, which already uses a plain
+// `group` for its own chevron hover effect). Positioned above the
+// trigger, centered.
+function CompanyHoverCard({ name, count }: { name: string; count: number }) {
+  return (
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover/logo:opacity-100 pointer-events-none transition-opacity duration-150 z-30 whitespace-nowrap">
+      <div className="bg-ink-secondary border border-white/10 rounded-lg px-3 py-2 shadow-xl">
+        <p className="text-xs font-semibold text-slate-100">{name}</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">{count} SOP{count !== 1 ? 's' : ''} available</p>
+      </div>
+      <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-ink-secondary border-r border-b border-white/10 rotate-45" />
+    </div>
+  );
+}
+
 // Three real pages under /portal, driven entirely by the URL so each has
 // its own address and back/forward works naturally:
 //   /portal                        -> category chooser (carrier vs AMS)
@@ -27,6 +46,10 @@ export default function VAPortal() {
   const companyId = category ? params.companyId ?? '' : '';
 
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
+  // insurance_company_id -> how many PUBLISHED SOPs it has - what a VA
+  // would actually find searching, shown as extra info in the hover
+  // tooltip on each carrier/AMS logo (see CompanyHoverCard below).
+  const [sopCounts, setSopCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -51,13 +74,23 @@ export default function VAPortal() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase.from('insurance_companies').select('*').order('name');
+      const [{ data, error }, { data: sopRows, error: sopError }] = await Promise.all([
+        supabase.from('insurance_companies').select('*').order('name'),
+        // Published only - matches what search would actually find, not
+        // pending/archived rows a VA could never see or search.
+        supabase.from('sop_documents').select('insurance_company_id').eq('status', 'published'),
+      ]);
       if (error) {
         setLoadError(error.message);
         setLoading(false);
         return;
       }
       setCompanies(data ?? []);
+      if (!sopError && sopRows) {
+        const counts: Record<string, number> = {};
+        for (const row of sopRows) counts[row.insurance_company_id] = (counts[row.insurance_company_id] ?? 0) + 1;
+        setSopCounts(counts);
+      }
       setLoading(false);
     }
     load();
@@ -264,7 +297,10 @@ export default function VAPortal() {
                 {carrierCount > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     {companies.filter((c) => c.type === 'carrier').slice(0, 8).map((c) => (
-                      <CarrierLogo key={c.id} name={c.name} size={32} />
+                      <div key={c.id} className="relative group/logo">
+                        <CarrierLogo name={c.name} size={32} />
+                        <CompanyHoverCard name={c.name} count={sopCounts[c.id] ?? 0} />
+                      </div>
                     ))}
                     {carrierCount > 8 && (
                       <span className="text-xs text-slate-500 font-medium">+{carrierCount - 8} more</span>
@@ -287,7 +323,10 @@ export default function VAPortal() {
                 {amsCount > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
                     {companies.filter((c) => c.type === 'ams').slice(0, 8).map((c) => (
-                      <CarrierLogo key={c.id} name={c.name} size={32} />
+                      <div key={c.id} className="relative group/logo">
+                        <CarrierLogo name={c.name} size={32} />
+                        <CompanyHoverCard name={c.name} count={sopCounts[c.id] ?? 0} />
+                      </div>
                     ))}
                     {amsCount > 8 && (
                       <span className="text-xs text-slate-500 font-medium">+{amsCount - 8} more</span>
@@ -329,8 +368,9 @@ export default function VAPortal() {
                     <button
                       key={c.id}
                       onClick={() => navigate(`/portal/${category}/${c.id}`)}
-                      className="relative flex flex-col items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-4 text-center transition-all hover:border-brand-500/40 hover:bg-white/[0.05]"
+                      className="relative group/logo flex flex-col items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.02] p-4 text-center transition-all hover:border-brand-500/40 hover:bg-white/[0.05]"
                     >
+                      <CompanyHoverCard name={c.name} count={sopCounts[c.id] ?? 0} />
                       <CarrierLogo name={c.name} size={48} />
                       <p className="text-[13px] font-medium text-slate-100 leading-tight">{c.name}</p>
                     </button>
