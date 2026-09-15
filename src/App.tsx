@@ -42,6 +42,8 @@ export default function App() {
           </Route>
 
           <Route path="/portal" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
+          <Route path="/portal/:category" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
+          <Route path="/portal/:category/:companyId" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

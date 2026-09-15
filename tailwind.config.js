@@ -30,6 +30,17 @@ export default {
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
+      keyframes: {
+        'zoom-in': {
+          from: { opacity: '0', transform: 'scale(0.94)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
+      },
+      animation: {
+        // Plays once when a carrier/AMS's own page mounts (see VAPortal.tsx)
+        // so picking a card visually "zooms in" to its dedicated page.
+        'zoom-in': 'zoom-in 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+      },
     },
   },
   plugins: [],
