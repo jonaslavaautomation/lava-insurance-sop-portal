@@ -7,6 +7,7 @@ import AdminLayout from '@/pages/admin/AdminLayout';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminCompanies from '@/pages/admin/AdminCompanies';
 import AdminAMS from '@/pages/admin/AdminAMS';
+import AdminCategories from '@/pages/admin/AdminCategories';
 import AdminLibrary from '@/pages/admin/AdminLibrary';
 import AdminUpload from '@/pages/admin/AdminUpload';
 import AdminReviewList from '@/pages/admin/AdminReviewList';
@@ -35,6 +36,7 @@ export default function App() {
             <Route index element={<AdminDashboard />} />
             <Route path="companies" element={<AdminCompanies />} />
             <Route path="ams" element={<AdminAMS />} />
+            <Route path="companies/:companyId/categories" element={<AdminCategories />} />
             <Route path="library" element={<AdminLibrary />} />
             <Route path="upload" element={<AdminUpload />} />
             <Route path="review" element={<AdminReviewList />} />
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/portal/submit" element={<ProtectedRoute><VASubmitSOP /></ProtectedRoute>} />
           <Route path="/portal/:category" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
           <Route path="/portal/:category/:companyId" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
+          <Route path="/portal/:category/:companyId/:workflowCategoryId" element={<ProtectedRoute><VAPortal /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

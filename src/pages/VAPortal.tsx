@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus, Activity, TrendingUp } from 'lucide-react';
-import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement, type CompanyVisit, type TopVisitedCompany, type CompanySubmission } from '@/lib/supabase';
+import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus, Activity, TrendingUp, LayoutGrid, FolderOpen } from 'lucide-react';
+import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement, type CompanyVisit, type TopVisitedCompany, type CompanySubmission, type SopCategory, type SopSubcategory } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { CarrierLogo } from '@/components/CarrierLogo';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { useAuth } from '@/context/AuthContext';
+import { getCategoryIcon } from '@/lib/categoryIcons';
 
 function isSourceType(value: string | undefined): value is CompanySourceType {
   return value === 'carrier' || value === 'ams';
@@ -54,19 +55,111 @@ function CompanyHoverCard({ name, count }: { name: string; count: number }) {
   );
 }
 
-// Three real pages under /portal, driven entirely by the URL so each has
+// One workflow-category card in the "Browse by Category" grid on a
+// carrier/AMS's own page - icon, name, description, SOP count and (if any)
+// subcategory count, matching the existing card style used everywhere else
+// in the portal (bg-[#121723]/80, rounded-xl, hover border/bg shift).
+function CategoryCard({ category, sopCount, subcategoryCount, onClick }: {
+  category: SopCategory;
+  sopCount: number;
+  subcategoryCount: number;
+  onClick: () => void;
+}) {
+  const Icon = getCategoryIcon(category.icon);
+  return (
+    <button
+      onClick={onClick}
+      className="text-left bg-[#121723]/80 border border-white/[0.08] rounded-xl p-5 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+    >
+      <div className="w-10 h-10 bg-brand-500/10 rounded-lg flex items-center justify-center mb-3">
+        <Icon className="w-5 h-5 text-brand-400" />
+      </div>
+      <h4 className="text-[15px] font-semibold text-slate-100">{category.name}</h4>
+      {category.description && (
+        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{category.description}</p>
+      )}
+      <div className="flex items-center gap-2 mt-3 text-[11px] text-slate-500">
+        <span>{sopCount} SOP{sopCount !== 1 ? 's' : ''}</span>
+        {subcategoryCount > 0 && (
+          <>
+            <span className="text-slate-700">|</span>
+            <span>{subcategoryCount} subcategor{subcategoryCount !== 1 ? 'ies' : 'y'}</span>
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium mt-3">
+        View workflows <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+      </div>
+    </button>
+  );
+}
+
+// One SOP row - used both for live search results and for the plain
+// "browse this category" listing (same shape, same look either way).
+function ResultRow({ result, engagement, onOpen }: {
+  result: SearchResult;
+  engagement: SopEngagement | undefined;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="w-full text-left bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+            <FileText className="w-4 h-4 text-brand-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium text-slate-100 truncate">{result.title}</p>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
+              {result.category_name && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-brand-400 bg-brand-500/10 border border-brand-500/20 rounded-full px-1.5 py-0.5">
+                  <FolderOpen className="w-2.5 h-2.5" />
+                  {result.category_name}{result.subcategory_name ? ` / ${result.subcategory_name}` : ''}
+                </span>
+              )}
+              <span className="text-[11px] text-slate-500">{result.process_category}</span>
+              <span className="text-[11px] text-slate-700">|</span>
+              <span className="text-[11px] text-slate-500">{result.line_of_business}</span>
+              <span className="text-[11px] text-slate-700">|</span>
+              <span className="text-[11px] font-mono text-slate-500">v{result.version}</span>
+              <span className="text-[11px] text-slate-700">|</span>
+              <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                <Eye className="w-3 h-3" /> {engagement?.view_count ?? 0}
+              </span>
+              <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                <ThumbsUp className="w-3 h-3" /> {engagement?.like_count ?? 0}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium flex-shrink-0">
+          View SOP
+          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Four real pages under /portal, driven entirely by the URL so each has
 // its own address and back/forward works naturally:
-//   /portal                        -> category chooser (carrier vs AMS)
-//   /portal/:category              -> logo grid for that category
-//   /portal/:category/:companyId   -> one carrier/AMS's own dedicated page
-//                                      (search lives here, and only here -
-//                                      no other carriers are shown)
+//   /portal                                          -> category chooser (carrier vs AMS)
+//   /portal/:category                                -> logo grid for that category
+//   /portal/:category/:companyId                     -> one carrier/AMS's Workflow Hub
+//                                                        (browse by category + search - only
+//                                                        this carrier/AMS, no others shown)
+//   /portal/:category/:companyId/:workflowCategoryId -> one workflow category's SOPs
+//                                                        (subcategories, or SOPs directly)
 export default function VAPortal() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const params = useParams<{ category?: string; companyId?: string }>();
+  const params = useParams<{ category?: string; companyId?: string; workflowCategoryId?: string }>();
   const category = isSourceType(params.category) ? params.category : null;
   const companyId = category ? params.companyId ?? '' : '';
+  const workflowCategoryId = companyId ? params.workflowCategoryId ?? '' : '';
 
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   // insurance_company_id -> how many PUBLISHED SOPs it has - what a VA
@@ -82,6 +175,24 @@ export default function VAPortal() {
   const [recentVisits, setRecentVisits] = useState<CompanyVisit[]>([]);
   const [recentSubmissions, setRecentSubmissions] = useState<CompanySubmission[]>([]);
   const [topVisited, setTopVisited] = useState<TopVisitedCompany | null>(null);
+
+  // Workflow categories for the CURRENTLY OPEN carrier/AMS only - loaded
+  // once per companyId, alongside the full lightweight list of that
+  // company's published SOPs (allSops, below). Two small queries total per
+  // company page visit - never re-fetched per category click, and never
+  // fetches content/steps/images (see SearchResult's own comment).
+  const [categories, setCategories] = useState<SopCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<SopSubcategory[]>([]);
+  const [allSops, setAllSops] = useState<SearchResult[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  // Distinct from categoriesLoading: false until the fetch for the CURRENT
+  // companyId has actually finished at least once. Without this, the
+  // "does this workflow category still exist" redirect effect below could
+  // run on first mount (categoriesLoading still false, categories still []
+  // from the initial state) before the fetch even starts, and wrongly
+  // bounce a perfectly valid deep link straight back to the hub.
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -183,19 +294,116 @@ export default function VAPortal() {
     }
   }, [loading, category, companyId, companies, navigate]);
 
-  // Every time the selected carrier/AMS changes (including "none"), the
-  // previous company's search state is stale - clear it.
+  // Load this carrier/AMS's workflow categories + its full published-SOP
+  // list (for counts, and for the plain "browse this category" listing)
+  // every time the selected company changes. Two lightweight queries -
+  // sop_categories/sop_subcategories are tiny per-carrier admin data, and
+  // search_sops(company, '') returns the same slim shape search already
+  // used (never content/steps/images) for every published SOP.
+  useEffect(() => {
+    setCategoriesLoaded(false);
+    if (!companyId) {
+      setCategories([]);
+      setSubcategories([]);
+      setAllSops([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadCategories() {
+      setCategoriesLoading(true);
+      const [{ data: cats, error: catsError }, { data: sops, error: sopsError }] = await Promise.all([
+        supabase.from('sop_categories').select('*').eq('insurance_company_id', companyId).order('sort_order'),
+        supabase.rpc('search_sops', { p_company_id: companyId, p_query: '' }),
+      ]);
+      if (cancelled) return;
+      if (catsError) {
+        console.error('Category load error:', catsError);
+        setCategories([]);
+        setSubcategories([]);
+      } else {
+        const catRows = (cats as SopCategory[]) ?? [];
+        setCategories(catRows);
+        if (catRows.length > 0) {
+          const { data: subs, error: subsError } = await supabase
+            .from('sop_subcategories')
+            .select('*')
+            .in('category_id', catRows.map((c) => c.id))
+            .order('sort_order');
+          if (!cancelled) {
+            if (subsError) console.error('Subcategory load error:', subsError);
+            setSubcategories((subs as SopSubcategory[]) ?? []);
+          }
+        } else {
+          setSubcategories([]);
+        }
+      }
+      if (sopsError) {
+        console.error('Company SOP list error:', sopsError);
+        setAllSops([]);
+      } else {
+        setAllSops((sops as SearchResult[]) ?? []);
+      }
+      setCategoriesLoading(false);
+      setCategoriesLoaded(true);
+    }
+    loadCategories();
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  // A stale/typo'd workflow category id in the URL - once categories have
+  // actually loaded, redirect back to the Workflow Hub instead of showing
+  // a dead page.
+  useEffect(() => {
+    if (!categoriesLoaded || !companyId || !workflowCategoryId || !category) return;
+    if (!categories.some((c) => c.id === workflowCategoryId)) {
+      navigate(`/portal/${category}/${companyId}`, { replace: true });
+    }
+  }, [categoriesLoaded, companyId, workflowCategoryId, categories, category, navigate]);
+
+  // Every time the selected carrier/AMS OR the open workflow category
+  // changes, the previous search state is stale - clear it.
   useEffect(() => {
     setSearchQuery('');
     setResults([]);
     setHasSearched(false);
     setSelectedResult(null);
-  }, [companyId]);
+  }, [companyId, workflowCategoryId]);
 
   const carrierCount = useMemo(() => companies.filter((c) => c.type === 'carrier').length, [companies]);
   const amsCount = useMemo(() => companies.filter((c) => c.type === 'ams').length, [companies]);
   const visibleCompanies = useMemo(() => companies.filter((c) => c.type === category), [companies, category]);
   const selectedCompanyObj = useMemo(() => companies.find((c) => c.id === companyId) ?? null, [companies, companyId]);
+  const selectedCategoryObj = useMemo(() => categories.find((c) => c.id === workflowCategoryId) ?? null, [categories, workflowCategoryId]);
+
+  // Published-only, dynamic counts - recomputed from allSops (never
+  // hardcoded, never stale) every time it or the category list changes.
+  const categorySopCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of allSops) if (s.category_id) counts[s.category_id] = (counts[s.category_id] ?? 0) + 1;
+    return counts;
+  }, [allSops]);
+  const subcategoryCountByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const sc of subcategories) counts[sc.category_id] = (counts[sc.category_id] ?? 0) + 1;
+    return counts;
+  }, [subcategories]);
+
+  // What the currently-open category's plain browse view (no search typed)
+  // shows: its own subcategories (only ones that actually have at least one
+  // published SOP), the SOPs directly under the category with no
+  // subcategory, and everything grouped from allSops - no extra query.
+  const categorySops = useMemo(
+    () => allSops.filter((s) => s.category_id === workflowCategoryId),
+    [allSops, workflowCategoryId]
+  );
+  const categorySubcategories = useMemo(
+    () => subcategories.filter((sc) => sc.category_id === workflowCategoryId),
+    [subcategories, workflowCategoryId]
+  );
+  const directCategorySops = useMemo(
+    () => categorySops.filter((s) => !s.subcategory_id),
+    [categorySops]
+  );
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -208,6 +416,7 @@ export default function VAPortal() {
     const { data, error } = await supabase.rpc('search_sops', {
       p_company_id: companyId,
       p_query: query,
+      ...(workflowCategoryId ? { p_category_id: workflowCategoryId } : {}),
     });
 
     let rows: SearchResult[] = [];
@@ -512,10 +721,10 @@ export default function VAPortal() {
         ) : (
           <div key={companyId} className="animate-zoom-in">
             <button
-              onClick={() => navigate(`/portal/${category}`)}
+              onClick={() => navigate(workflowCategoryId ? `/portal/${category}/${companyId}` : `/portal/${category}`)}
               className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-300 mb-4 transition-colors"
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> {category === 'ams' ? 'All AMS' : 'All Carriers'}
+              <ChevronLeft className="w-3.5 h-3.5" /> {workflowCategoryId ? selectedCompanyObj?.name ?? 'Back' : category === 'ams' ? 'All AMS' : 'All Carriers'}
             </button>
 
             {!selectedCompanyObj ? (
@@ -535,14 +744,63 @@ export default function VAPortal() {
                   </div>
                 </div>
 
+                {!workflowCategoryId ? (
+                  <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-brand-500/10 rounded-md flex items-center justify-center">
+                        <LayoutGrid className="w-4 h-4 text-brand-400" />
+                      </div>
+                      <div>
+                        <label className="block text-[13px] font-semibold text-slate-100">Browse by Category</label>
+                        <p className="text-xs text-slate-500">Workflow categories for {selectedCompanyObj.name}</p>
+                      </div>
+                    </div>
+                    {categoriesLoading || !categoriesLoaded ? (
+                      <div className="text-center py-8">
+                        <Loader2 className="w-4 h-4 text-brand-500 animate-spin mx-auto" />
+                      </div>
+                    ) : categories.length === 0 ? (
+                      <p className="text-sm text-slate-500 py-4 text-center">
+                        No workflow categories have been configured for this carrier yet.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        {categories.map((cat) => (
+                          <CategoryCard
+                            key={cat.id}
+                            category={cat}
+                            sopCount={categorySopCounts[cat.id] ?? 0}
+                            subcategoryCount={subcategoryCountByCategory[cat.id] ?? 0}
+                            onClick={() => navigate(`/portal/${category}/${companyId}/${cat.id}`)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-4 flex-wrap">
+                    <button onClick={() => navigate('/portal')} className="hover:text-slate-300 transition-colors">All Carriers</button>
+                    <ChevronRight className="w-3 h-3 text-slate-700" />
+                    <button onClick={() => navigate(`/portal/${category}/${companyId}`)} className="hover:text-slate-300 transition-colors">{selectedCompanyObj.name}</button>
+                    <ChevronRight className="w-3 h-3 text-slate-700" />
+                    <span className="text-slate-300 font-medium">{selectedCategoryObj?.name ?? '…'}</span>
+                  </div>
+                )}
+
                 <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5 mb-4">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-8 h-8 bg-emerald-500/10 rounded-md flex items-center justify-center">
                       <Search className="w-4 h-4 text-emerald-400" />
                     </div>
                     <div>
-                      <label className="block text-[13px] font-semibold text-slate-100">Search Process / Workflow</label>
-                      <p className="text-xs text-slate-500">Search within {selectedCompanyObj.name} approved SOPs</p>
+                      <label className="block text-[13px] font-semibold text-slate-100">
+                        {workflowCategoryId ? `Search within ${selectedCategoryObj?.name ?? 'this category'}` : 'Search Process / Workflow'}
+                      </label>
+                      <p className="text-xs text-slate-500">
+                        {workflowCategoryId
+                          ? `Search only within ${selectedCategoryObj?.name ?? 'this category'}'s approved SOPs`
+                          : `Search within ${selectedCompanyObj.name} approved SOPs`}
+                      </p>
                     </div>
                   </div>
                   <form onSubmit={handleSearch} className="flex gap-3">
@@ -593,56 +851,72 @@ export default function VAPortal() {
                     <p className="text-xs text-slate-500 mb-3">{results.length} result{results.length !== 1 ? 's' : ''} found</p>
                     <div className="space-y-2.5">
                       {results.map((result) => (
-                        <button
-                          key={result.document_id}
-                          onClick={() => openResult(result)}
-                          className="w-full text-left bg-[#121723]/80 rounded-lg border border-white/[0.08] p-4 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3.5 min-w-0">
-                              <div className="w-9 h-9 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
-                                <FileText className="w-4 h-4 text-brand-400" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[13px] font-medium text-slate-100 truncate">{result.title}</p>
-                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
-                                  <span className="text-[11px] text-slate-500">{result.process_category}</span>
-                                  <span className="text-[11px] text-slate-700">|</span>
-                                  <span className="text-[11px] text-slate-500">{result.line_of_business}</span>
-                                  <span className="text-[11px] text-slate-700">|</span>
-                                  <span className="text-[11px] font-mono text-slate-500">v{result.version}</span>
-                                  <span className="text-[11px] text-slate-700">|</span>
-                                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                                    <Eye className="w-3 h-3" /> {engagement[result.document_id]?.view_count ?? 0}
-                                  </span>
-                                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                                    <ThumbsUp className="w-3 h-3" /> {engagement[result.document_id]?.like_count ?? 0}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-brand-400 text-xs font-medium flex-shrink-0">
-                              View SOP
-                              <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                            </div>
-                          </div>
-                        </button>
+                        <ResultRow key={result.document_id} result={result} engagement={engagement[result.document_id]} onOpen={() => openResult(result)} />
                       ))}
                     </div>
                   </div>
                 )}
 
-                {!searching && !hasSearched && (
+                {!searching && !hasSearched && !workflowCategoryId && (
                   <div className="bg-brand-500/[0.06] border border-brand-500/20 rounded-lg p-4 flex items-start gap-3">
                     <Info className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm text-slate-200 font-medium">Ready to search</p>
                       <p className="text-xs text-slate-400 mt-1">
                         Enter a process or workflow term above to search within the approved SOP documents for {selectedCompanyObj.name}.
-                        Only published SOPs are included in search results.
+                        Only published SOPs are included in search results, or browse by category above.
                       </p>
                     </div>
                   </div>
+                )}
+
+                {!searching && !hasSearched && workflowCategoryId && (
+                  categoriesLoading || !categoriesLoaded ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="w-5 h-5 text-brand-500 animate-spin mx-auto" />
+                    </div>
+                  ) : categorySops.length === 0 ? (
+                    <div className="bg-[#121723]/80 border border-white/[0.08] rounded-lg p-12 text-center">
+                      <div className="inline-flex items-center justify-center w-12 h-12 bg-white/[0.04] rounded-lg mb-4">
+                        <FolderOpen className="w-6 h-6 text-slate-500" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-slate-100 mb-2">No SOPs yet</h3>
+                      <p className="text-sm text-slate-500 max-w-md mx-auto">
+                        This category doesn't have any published SOPs yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {categorySubcategories.map((sub) => {
+                        const subSops = categorySops.filter((s) => s.subcategory_id === sub.id);
+                        if (subSops.length === 0) return null;
+                        return (
+                          <div key={sub.id}>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2.5">
+                              {sub.name} <span className="text-slate-600 normal-case font-normal">({subSops.length})</span>
+                            </p>
+                            <div className="space-y-2.5">
+                              {subSops.map((result) => (
+                                <ResultRow key={result.document_id} result={result} engagement={engagement[result.document_id]} onOpen={() => openResult(result)} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {directCategorySops.length > 0 && (
+                        <div>
+                          {categorySubcategories.length > 0 && (
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2.5">Other</p>
+                          )}
+                          <div className="space-y-2.5">
+                            {directCategorySops.map((result) => (
+                              <ResultRow key={result.document_id} result={result} engagement={engagement[result.document_id]} onOpen={() => openResult(result)} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
                 )}
               </>
             )}

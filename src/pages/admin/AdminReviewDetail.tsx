@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp, User, ImageIcon, Save } from 'lucide-react';
-import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement, type SopImage, type SopStep } from '@/lib/supabase';
+import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement, type SopImage, type SopStep, type SopCategory, type SopSubcategory } from '@/lib/supabase';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { ImageRedactor } from '@/components/ImageRedactor';
@@ -34,6 +34,14 @@ export default function AdminReviewDetail() {
   const [editableSteps, setEditableSteps] = useState<SopStep[]>([]);
   const [redactorIndex, setRedactorIndex] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
+  // Workflow category/subcategory assignment - lets an admin move an SOP
+  // between categories (or out of one entirely) right from the review
+  // screen, on top of whatever the submitter picked (if anything) in
+  // SopSubmissionForm. Both empty-string sentinels map to null on save.
+  const [categories, setCategories] = useState<SopCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<SopSubcategory[]>([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [subcategoryId, setSubcategoryId] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -47,10 +55,20 @@ export default function AdminReviewDetail() {
       setEditableContent(c?.content ?? '');
       setEditableImages(c?.images ?? []);
       setEditableSteps(c?.steps ?? []);
+      setCategoryId(d.category_id ?? '');
+      setSubcategoryId(d.subcategory_id ?? '');
 
       if (d) {
         const { data: comp } = await supabase.from('insurance_companies').select('*').eq('id', d.insurance_company_id).maybeSingle();
         setCompany(comp as InsuranceCompany | null);
+
+        const { data: cats } = await supabase.from('sop_categories').select('*').eq('insurance_company_id', d.insurance_company_id).order('sort_order');
+        const catRows = (cats as SopCategory[]) ?? [];
+        setCategories(catRows);
+        if (catRows.length > 0) {
+          const { data: subs } = await supabase.from('sop_subcategories').select('*').in('category_id', catRows.map((c) => c.id)).order('sort_order');
+          setSubcategories((subs as SopSubcategory[]) ?? []);
+        }
 
         const { data: vers } = await supabase.from('sop_versions').select('*').eq('sop_document_id', id).order('created_at', { ascending: false });
         setVersions(vers ?? []);
@@ -91,6 +109,8 @@ export default function AdminReviewDetail() {
     return updates;
   }
 
+  const subcategoryOptions = useMemo(() => subcategories.filter((s) => s.category_id === categoryId), [subcategories, categoryId]);
+
   // Shared by "Save Changes" and every status-changing action - a manual
   // redaction fix (or a text edit) needs to actually reach the database
   // regardless of which button triggered the save, and a failure here
@@ -110,13 +130,34 @@ export default function AdminReviewDetail() {
     return true;
   }
 
+  // Same pattern as persistContentChanges, for the category/subcategory
+  // assignment - a separate sop_documents update since it's doc-level
+  // metadata, not content.
+  async function persistCategoryAssignment(): Promise<boolean> {
+    if (!id || !doc) return false;
+    const nextCategoryId = categoryId || null;
+    const nextSubcategoryId = subcategoryId || null;
+    if (nextCategoryId === doc.category_id && nextSubcategoryId === doc.subcategory_id) return true;
+    const { error: catError } = await supabase.from('sop_documents').update({
+      category_id: nextCategoryId,
+      subcategory_id: nextSubcategoryId,
+    }).eq('id', id);
+    if (catError) {
+      setError(`Could not save the category assignment: ${catError.message}`);
+      return false;
+    }
+    setDoc((prev) => (prev ? { ...prev, category_id: nextCategoryId, subcategory_id: nextSubcategoryId } : prev));
+    return true;
+  }
+
   async function handleSaveChanges() {
     setActionLoading(true);
     setError(null);
     setSuccess(null);
-    const ok = await persistContentChanges();
+    const contentOk = await persistContentChanges();
+    const categoryOk = contentOk && await persistCategoryAssignment();
     setActionLoading(false);
-    if (ok) setSuccess('Changes saved.');
+    if (contentOk && categoryOk) setSuccess('Changes saved.');
   }
 
   async function updateStatus(status: 'published' | 'archived') {
@@ -130,6 +171,11 @@ export default function AdminReviewDetail() {
     // marked published anyway with no indication something went wrong.
     const contentSaved = await persistContentChanges();
     if (!contentSaved) {
+      setActionLoading(false);
+      return;
+    }
+    const categorySaved = await persistCategoryAssignment();
+    if (!categorySaved) {
       setActionLoading(false);
       return;
     }
@@ -263,6 +309,39 @@ export default function AdminReviewDetail() {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-white/[0.06] grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Workflow Category</label>
+            {categories.length === 0 ? (
+              <p className="text-xs text-slate-600 h-10 flex items-center">
+                No workflow categories set up for {company?.name ?? 'this company'} yet.
+              </p>
+            ) : (
+              <select
+                value={categoryId}
+                onChange={(e) => { setCategoryId(e.target.value); setSubcategoryId(''); setSuccess(null); }}
+                className="w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
+              >
+                <option value="" className="bg-ink-secondary">— No category —</option>
+                {categories.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
+              </select>
+            )}
+          </div>
+          {categoryId && subcategoryOptions.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1.5">Subcategory</label>
+              <select
+                value={subcategoryId}
+                onChange={(e) => { setSubcategoryId(e.target.value); setSuccess(null); }}
+                className="w-full h-10 px-3 rounded-lg border border-white/10 bg-white/[0.03] focus:ring-1 focus:ring-brand-500 focus:border-brand-500 text-sm text-slate-100"
+              >
+                <option value="" className="bg-ink-secondary">— None —</option>
+                {subcategoryOptions.map((s) => <option key={s.id} value={s.id} className="bg-ink-secondary">{s.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         {versions.length > 0 && (

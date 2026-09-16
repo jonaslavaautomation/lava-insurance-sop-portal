@@ -60,6 +60,8 @@ export interface SopDocument {
   status: 'pending' | 'published' | 'archived';
   uploaded_by: string | null;
   file_path: string | null;
+  category_id: string | null;
+  subcategory_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -104,6 +106,29 @@ export interface SopDocumentWithCompany extends SopDocument {
   insurance_companies?: Pick<InsuranceCompany, 'id' | 'name'>;
 }
 
+/** An admin-managed workflow category, scoped to one carrier/AMS (see
+ *  sop_categories). `icon` is a Lucide icon name stored as plain text -
+ *  the frontend looks it up in a small map, falling back to a generic
+ *  icon for anything it doesn't recognize (e.g. an old/typo'd value). */
+export interface SopCategory {
+  id: string;
+  insurance_company_id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  sort_order: number;
+  created_at: string;
+}
+
+/** An optional subcategory nested under one SopCategory. */
+export interface SopSubcategory {
+  id: string;
+  category_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
 // Deliberately lightweight - search_sops() no longer returns content/steps/
 // images (those can carry several MB of embedded screenshots per SOP each).
 // Sending that for every matching row on every search was the actual cause
@@ -117,6 +142,10 @@ export interface SearchResult {
   process_category: string;
   version: string;
   insurance_company_name: string;
+  category_id: string | null;
+  category_name: string | null;
+  subcategory_id: string | null;
+  subcategory_name: string | null;
 }
 
 /** Full body of one SOP, fetched on demand when a VA opens it (not as part

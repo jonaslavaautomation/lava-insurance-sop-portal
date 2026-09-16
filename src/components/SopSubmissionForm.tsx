@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Upload, FileText, Loader2, ImageIcon, ListOrdered, ShieldCheck, ScanEye, Building2, Server, AlertTriangle } from 'lucide-react';
-import { supabase, type InsuranceCompany, type CompanySourceType, type SopStep } from '@/lib/supabase';
+import { supabase, type InsuranceCompany, type CompanySourceType, type SopStep, type SopCategory, type SopSubcategory } from '@/lib/supabase';
 import { extractTextFromFile, type ExtractedImage } from '@/lib/extractDocument';
 import { autoRedactImage } from '@/lib/autoRedactImage';
 import { useAuth } from '@/context/AuthContext';
@@ -63,6 +63,15 @@ export function SopSubmissionForm({
   const [lineOfBusiness, setLineOfBusiness] = useState('Personal Lines');
   const [processCategory, setProcessCategory] = useState('');
   const [version, setVersion] = useState('1.0');
+  // Workflow category/subcategory (the Carrier Workflow Hub an admin sets
+  // up under Carrier Management -> Categories) - scoped to whichever
+  // company is currently selected above, refetched whenever it changes.
+  // Both are optional: "no category" and "category with no subcategory"
+  // are both valid states, matching how VAs browse the portal.
+  const [categories, setCategories] = useState<SopCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<SopSubcategory[]>([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [subcategoryId, setSubcategoryId] = useState('');
   const [content, setContent] = useState('');
   const [fileName, setFileName] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -205,6 +214,35 @@ export function SopSubmissionForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredCompanies]);
 
+  // This company's workflow categories - refetched whenever the selected
+  // company changes, since categories are entirely per-carrier/AMS. Any
+  // previously-picked category/subcategory is cleared, since it almost
+  // certainly doesn't belong to the newly-selected company.
+  useEffect(() => {
+    setCategoryId('');
+    setSubcategoryId('');
+    if (!companyId) { setCategories([]); setSubcategories([]); return; }
+    let cancelled = false;
+    async function loadCategories() {
+      const { data: cats, error: catsError } = await supabase
+        .from('sop_categories').select('*').eq('insurance_company_id', companyId).order('sort_order');
+      if (cancelled) return;
+      if (catsError) { console.error('Category load error:', catsError); setCategories([]); setSubcategories([]); return; }
+      const catRows = (cats as SopCategory[]) ?? [];
+      setCategories(catRows);
+      if (catRows.length === 0) { setSubcategories([]); return; }
+      const { data: subs, error: subsError } = await supabase
+        .from('sop_subcategories').select('*').in('category_id', catRows.map((c) => c.id)).order('sort_order');
+      if (cancelled) return;
+      if (subsError) { console.error('Subcategory load error:', subsError); setSubcategories([]); return; }
+      setSubcategories((subs as SopSubcategory[]) ?? []);
+    }
+    loadCategories();
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  const subcategoryOptions = useMemo(() => subcategories.filter((s) => s.category_id === categoryId), [subcategories, categoryId]);
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -263,6 +301,8 @@ export function SopSubmissionForm({
       status: 'pending',
       uploaded_by: user?.id ?? null,
       file_path: fileName || null,
+      category_id: categoryId || null,
+      subcategory_id: subcategoryId || null,
     }).select().single();
 
     if (docError) {
@@ -428,6 +468,31 @@ export function SopSubmissionForm({
               className={inputClass}
             />
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div>
+            <label className={labelClass}>Workflow Category</label>
+            {categories.length === 0 ? (
+              <p className="text-xs text-slate-600 h-11 flex items-center">
+                No workflow categories set up for this {sourceType === 'ams' ? 'AMS' : 'carrier'} yet — leave blank, an admin can assign one during review.
+              </p>
+            ) : (
+              <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setSubcategoryId(''); }} className={inputClass}>
+                <option value="" className="bg-ink-secondary">— No category —</option>
+                {categories.map((c) => <option key={c.id} value={c.id} className="bg-ink-secondary">{c.name}</option>)}
+              </select>
+            )}
+          </div>
+          {categoryId && subcategoryOptions.length > 0 && (
+            <div>
+              <label className={labelClass}>Subcategory</label>
+              <select value={subcategoryId} onChange={(e) => setSubcategoryId(e.target.value)} className={inputClass}>
+                <option value="" className="bg-ink-secondary">— None —</option>
+                {subcategoryOptions.map((s) => <option key={s.id} value={s.id} className="bg-ink-secondary">{s.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
 
         <div>

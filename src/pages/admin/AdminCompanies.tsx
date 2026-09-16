@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
+import { Building2, Plus, Trash2, FileText, Loader2, FolderKanban } from 'lucide-react';
 import { supabase, type InsuranceCompany } from '@/lib/supabase';
 import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 import { CarrierLogo } from '@/components/CarrierLogo';
@@ -130,16 +130,29 @@ export default function AdminCompanies() {
                     <p className="text-xs text-slate-500 font-mono mt-0.5">{new Date(company.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(company.id, company.name); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleDelete(company.id, company.name); } }}
-                  className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                  aria-label={`Delete ${company.name}`}
-                >
-                  <Trash2 className="w-5 h-5" />
-                </span>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-colors">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/admin/companies/${company.id}/categories`); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); navigate(`/admin/companies/${company.id}/categories`); } }}
+                    className="text-slate-600 hover:text-brand-400 transition-colors p-1"
+                    aria-label={`Manage categories for ${company.name}`}
+                    title="Manage workflow categories"
+                  >
+                    <FolderKanban className="w-5 h-5" />
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(company.id, company.name); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleDelete(company.id, company.name); } }}
+                    className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                    aria-label={`Delete ${company.name}`}
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </span>
+                </div>
               </div>
               <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
                 <FileText className="w-4 h-4" />

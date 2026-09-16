@@ -325,6 +325,91 @@ CREATE POLICY "sop_versions_delete_admin" ON sop_versions
 CREATE INDEX IF NOT EXISTS idx_sop_versions_doc ON sop_versions(sop_document_id);
 
 -- ============================================================
+-- CARRIER WORKFLOW CATEGORIES (admin-managed, per carrier/AMS)
+-- ============================================================
+-- sop_documents.process_category stays as-is (free text, unstructured) -
+-- this is a genuinely new, additive structure: insurance_companies ->
+-- sop_categories -> sop_subcategories (optional) -> sop_documents. An SOP
+-- with no category_id set is simply not shown in any category browse view
+-- yet; everything else about it (search, viewing, likes/views) is unaffected.
+CREATE TABLE IF NOT EXISTS sop_categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  insurance_company_id uuid NOT NULL REFERENCES insurance_companies(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  description text,
+  icon text NOT NULL DEFAULT 'FileText',
+  sort_order int NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (insurance_company_id, name)
+);
+
+ALTER TABLE sop_categories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sop_categories_select_all" ON sop_categories;
+CREATE POLICY "sop_categories_select_all" ON sop_categories
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "sop_categories_insert_admin" ON sop_categories;
+CREATE POLICY "sop_categories_insert_admin" ON sop_categories
+  FOR INSERT TO authenticated
+  WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "sop_categories_update_admin" ON sop_categories;
+CREATE POLICY "sop_categories_update_admin" ON sop_categories
+  FOR UPDATE TO authenticated
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "sop_categories_delete_admin" ON sop_categories;
+CREATE POLICY "sop_categories_delete_admin" ON sop_categories
+  FOR DELETE TO authenticated
+  USING (is_admin());
+
+CREATE INDEX IF NOT EXISTS idx_sop_categories_company ON sop_categories(insurance_company_id);
+
+CREATE TABLE IF NOT EXISTS sop_subcategories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id uuid NOT NULL REFERENCES sop_categories(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  sort_order int NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (category_id, name)
+);
+
+ALTER TABLE sop_subcategories ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sop_subcategories_select_all" ON sop_subcategories;
+CREATE POLICY "sop_subcategories_select_all" ON sop_subcategories
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "sop_subcategories_insert_admin" ON sop_subcategories;
+CREATE POLICY "sop_subcategories_insert_admin" ON sop_subcategories
+  FOR INSERT TO authenticated
+  WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "sop_subcategories_update_admin" ON sop_subcategories;
+CREATE POLICY "sop_subcategories_update_admin" ON sop_subcategories
+  FOR UPDATE TO authenticated
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "sop_subcategories_delete_admin" ON sop_subcategories;
+CREATE POLICY "sop_subcategories_delete_admin" ON sop_subcategories
+  FOR DELETE TO authenticated
+  USING (is_admin());
+
+CREATE INDEX IF NOT EXISTS idx_sop_subcategories_category ON sop_subcategories(category_id);
+
+ALTER TABLE sop_documents
+  ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES sop_categories(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS subcategory_id uuid REFERENCES sop_subcategories(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_sop_docs_category ON sop_documents(category_id);
+CREATE INDEX IF NOT EXISTS idx_sop_docs_subcategory ON sop_documents(subcategory_id);
+
+-- ============================================================
 -- SEARCH FUNCTION
 -- ============================================================
 -- Searches published SOP content scoped to an insurance company.
@@ -338,10 +423,19 @@ CREATE INDEX IF NOT EXISTS idx_sop_versions_doc ON sop_versions(sop_document_id)
 -- since the query itself is cheap at this table size. The full body of one
 -- specific SOP is fetched separately, once, only when a VA opens it - see
 -- fetchSopContent() in src/lib/supabase.ts.
+-- p_category_id is optional (defaults to NULL = no filter) so every
+-- existing call site keeps working unchanged; category_id/category_name/
+-- subcategory_id/subcategory_name let results show (and the category
+-- browse view group by) which category an SOP belongs to. Calling this
+-- with p_query = '' returns every published SOP for the company (any
+-- string ILIKE '%%' is true) - the Workflow Hub uses that instead of a
+-- second near-duplicate "list SOPs" function.
 DROP FUNCTION IF EXISTS search_sops(uuid, text);
+DROP FUNCTION IF EXISTS search_sops(uuid, text, uuid);
 CREATE FUNCTION search_sops(
   p_company_id uuid,
-  p_query text
+  p_query text,
+  p_category_id uuid DEFAULT NULL
 )
 RETURNS TABLE (
   document_id uuid,
@@ -349,7 +443,11 @@ RETURNS TABLE (
   line_of_business text,
   process_category text,
   version text,
-  insurance_company_name text
+  insurance_company_name text,
+  category_id uuid,
+  category_name text,
+  subcategory_id uuid,
+  subcategory_name text
 )
 LANGUAGE sql
 SECURITY DEFINER
@@ -361,12 +459,19 @@ AS $$
     d.line_of_business,
     d.process_category,
     d.version,
-    ic.name
+    ic.name,
+    d.category_id,
+    cat.name,
+    d.subcategory_id,
+    sub.name
   FROM sop_documents d
   JOIN sop_content c ON c.sop_document_id = d.id
   JOIN insurance_companies ic ON ic.id = d.insurance_company_id
+  LEFT JOIN sop_categories cat ON cat.id = d.category_id
+  LEFT JOIN sop_subcategories sub ON sub.id = d.subcategory_id
   WHERE d.insurance_company_id = p_company_id
     AND d.status = 'published'
+    AND (p_category_id IS NULL OR d.category_id = p_category_id)
     AND (
       d.title ILIKE '%' || p_query || '%'
       OR d.process_category ILIKE '%' || p_query || '%'
