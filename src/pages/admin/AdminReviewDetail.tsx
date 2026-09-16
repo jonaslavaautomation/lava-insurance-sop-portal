@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp, User } from 'lucide-react';
-import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement } from '@/lib/supabase';
+import { ArrowLeft, CheckCircle, XCircle, Archive, Loader2, FileText, History, Eye, ThumbsUp, User, ImageIcon, Save } from 'lucide-react';
+import { supabase, type SopDocument, type SopContent, type SopVersion, type InsuranceCompany, type SopEngagement, type SopImage, type SopStep } from '@/lib/supabase';
 import { StepsViewer } from '@/components/StepsViewer';
 import { DocumentViewer } from '@/components/DocumentViewer';
+import { ImageRedactor } from '@/components/ImageRedactor';
 import { ErrorState } from '@/components/admin/DataStates';
 import { SensitiveTextScanner } from '@/components/admin/SensitiveTextScanner';
+import { StepsSensitiveTextScanner } from '@/components/admin/StepsSensitiveTextScanner';
 
 export default function AdminReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +22,17 @@ export default function AdminReviewDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [editableContent, setEditableContent] = useState('');
+  // Screenshots can still be opened and manually redacted here, even
+  // though the automatic scan already ran at upload time - it's a
+  // best-effort pass, not a guarantee (see its own docs), and this is the
+  // last checkpoint before a SOP goes live. Kept as two separate arrays
+  // (only one is ever relevant, based on content_type) rather than one
+  // union type, to match SopContent's own shape.
+  const [editableImages, setEditableImages] = useState<SopImage[]>([]);
+  const [editableSteps, setEditableSteps] = useState<SopStep[]>([]);
+  const [redactorIndex, setRedactorIndex] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
 
   useEffect(() => {
@@ -33,6 +45,8 @@ export default function AdminReviewDetail() {
       const { data: c } = await supabase.from('sop_content').select('*').eq('sop_document_id', id).maybeSingle();
       setContent(c as SopContent | null);
       setEditableContent(c?.content ?? '');
+      setEditableImages(c?.images ?? []);
+      setEditableSteps(c?.steps ?? []);
 
       if (d) {
         const { data: comp } = await supabase.from('insurance_companies').select('*').eq('id', d.insurance_company_id).maybeSingle();
@@ -58,25 +72,66 @@ export default function AdminReviewDetail() {
     load();
   }, [id]);
 
+  // What's actually changed since load - only sent to the database if
+  // non-empty, and only the fields that changed (never overwrites the
+  // other content_type's own field with a stale/empty value).
+  function buildContentUpdates(): Record<string, unknown> {
+    if (!content) return {};
+    const updates: Record<string, unknown> = {};
+    if (content.content_type === 'steps') {
+      if (JSON.stringify(editableSteps) !== JSON.stringify(content.steps ?? [])) {
+        updates.steps = editableSteps;
+      }
+    } else {
+      if (editableContent !== content.content) updates.content = editableContent.trim();
+      if (JSON.stringify(editableImages) !== JSON.stringify(content.images ?? [])) {
+        updates.images = editableImages;
+      }
+    }
+    return updates;
+  }
+
+  // Shared by "Save Changes" and every status-changing action - a manual
+  // redaction fix (or a text edit) needs to actually reach the database
+  // regardless of which button triggered the save, and a failure here
+  // must stop a publish/archive from proceeding with an unsaved fix.
+  async function persistContentChanges(): Promise<boolean> {
+    if (!id) return false;
+    const updates = buildContentUpdates();
+    if (Object.keys(updates).length === 0) return true;
+    const { error: contentError } = await supabase.from('sop_content').update(updates).eq('sop_document_id', id);
+    if (contentError) {
+      setError(`Could not save your changes: ${contentError.message}`);
+      return false;
+    }
+    // Reflect the save locally so a second save (or a status change right
+    // after) correctly sees nothing left to persist.
+    setContent((prev) => (prev ? { ...prev, ...updates } : prev));
+    return true;
+  }
+
+  async function handleSaveChanges() {
+    setActionLoading(true);
+    setError(null);
+    setSuccess(null);
+    const ok = await persistContentChanges();
+    setActionLoading(false);
+    if (ok) setSuccess('Changes saved.');
+  }
+
   async function updateStatus(status: 'published' | 'archived') {
     if (!id) return;
     setActionLoading(true);
     setError(null);
+    setSuccess(null);
 
-    // Save edited content (steps-based SOPs are read-only here for now —
-    // there's no per-step editor yet, so never overwrite their steps json).
     // Every write below is checked and aborts the whole action on failure —
-    // previously only the final status update's error was checked, so a
-    // failed content save or version write could silently be dropped while
-    // the SOP still got marked published, with no indication anything went
-    // wrong.
-    if (content?.content_type !== 'steps' && editableContent !== content?.content) {
-      const { error: contentError } = await supabase.from('sop_content').update({ content: editableContent }).eq('sop_document_id', id);
-      if (contentError) {
-        setError(`Could not save your content edits: ${contentError.message}`);
-        setActionLoading(false);
-        return;
-      }
+    // a failed content save or version write must never let the SOP get
+    // marked published anyway with no indication something went wrong.
+    const contentSaved = await persistContentChanges();
+    if (!contentSaved) {
+      setActionLoading(false);
+      return;
     }
 
     // If publishing, archive any currently-published versions of this doc
@@ -123,6 +178,24 @@ export default function AdminReviewDetail() {
     navigate('/admin/library');
   }
 
+  // Unified "screenshots that can be opened and manually redacted here" —
+  // whichever content_type this SOP is, same as SopSubmissionForm's own
+  // reviewableImages, so the redactor modal below only needs one code path.
+  const isSteps = content?.content_type === 'steps';
+  const reviewableImages: { index: number; dataUrl: string }[] = isSteps
+    ? editableSteps.map((s, i) => ({ index: i, dataUrl: s.imageUrl })).filter((x): x is { index: number; dataUrl: string } => !!x.dataUrl)
+    : editableImages.map((im, i) => ({ index: i, dataUrl: im.dataUrl }));
+
+  function applyRedaction(index: number, redactedDataUrl: string) {
+    if (isSteps) {
+      setEditableSteps((prev) => prev.map((s, i) => (i === index ? { ...s, imageUrl: redactedDataUrl } : s)));
+    } else {
+      setEditableImages((prev) => prev.map((im, i) => (i === index ? { ...im, dataUrl: redactedDataUrl } : im)));
+    }
+    setRedactorIndex(null);
+    setSuccess(null);
+  }
+
   if (loading) return <div className="p-8 text-slate-500 text-sm animate-pulse">Loading...</div>;
 
   if (!doc) {
@@ -159,6 +232,11 @@ export default function AdminReviewDetail() {
       </Link>
 
       {error && <div className="mb-5"><ErrorState message={error} /></div>}
+      {success && (
+        <div className="mb-5 flex items-center gap-2.5 text-sm text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-4 py-3">
+          <CheckCircle className="w-4 h-4" /> {success}
+        </div>
+      )}
 
       <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 mb-6">
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
@@ -219,13 +297,18 @@ export default function AdminReviewDetail() {
             <FileText className="w-5 h-5 text-slate-500" /> SOP Content
           </h2>
           <span className="text-sm text-slate-500">
-            {content?.content_type === 'steps' ? 'Step-by-step walkthrough (read-only preview)' : 'Review and edit before publishing'}
+            {isSteps ? 'Step-by-step walkthrough (text is read-only; screenshots can still be redacted below)' : 'Review and edit before publishing'}
           </span>
         </div>
-        {content?.content_type === 'steps' && content.steps ? (
-          <div className="bg-white rounded-lg p-4">
-            <StepsViewer steps={content.steps} />
-          </div>
+        {isSteps ? (
+          <>
+            <div className="bg-white rounded-lg p-4">
+              <StepsViewer steps={editableSteps} />
+            </div>
+            <div className="mt-3">
+              <StepsSensitiveTextScanner steps={editableSteps} onChange={setEditableSteps} />
+            </div>
+          </>
         ) : (
           <>
             <textarea
@@ -239,13 +322,45 @@ export default function AdminReviewDetail() {
             </div>
             <div className="mt-5 border border-white/[0.08] rounded-lg p-5 bg-white">
               <p className="text-sm font-medium text-slate-500 mb-3.5">Preview — this is what VAs will see</p>
-              <DocumentViewer content={editableContent} images={content?.images} />
+              <DocumentViewer content={editableContent} images={editableImages} />
             </div>
           </>
         )}
       </div>
 
+      {reviewableImages.length > 0 && (
+        <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 mb-6">
+          <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2.5 mb-1.5">
+            <ImageIcon className="w-5 h-5 text-slate-500" /> Screenshots
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">
+            These were already scanned automatically on upload — that's a best-effort pass, not a guarantee. Open any
+            screenshot to double-check it or blur anything it missed before publishing.
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {reviewableImages.map(({ index, dataUrl }) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setRedactorIndex(index)}
+                className="rounded-lg border-2 border-white/15 hover:border-brand-500/50 overflow-hidden transition-colors"
+              >
+                <img src={dataUrl} alt={`Screenshot ${index + 1}`} className="w-full h-20 object-cover object-top" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={handleSaveChanges}
+          disabled={actionLoading}
+          className="flex items-center gap-2 h-11 bg-white/[0.06] hover:bg-white/[0.1] text-slate-200 text-sm font-medium px-5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Changes
+        </button>
         {doc.status !== 'published' && (
           <button
             onClick={() => updateStatus('published')}
@@ -283,6 +398,22 @@ export default function AdminReviewDetail() {
           <XCircle className="w-4 h-4" /> Delete
         </button>
       </div>
+
+      {redactorIndex !== null && reviewableImages.find((r) => r.index === redactorIndex) && (
+        <div className="fixed inset-0 bg-black/60 z-30 flex items-center justify-center p-4" onClick={() => setRedactorIndex(null)}>
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-slate-900 mb-4">Review Screenshot</h2>
+            <p className="text-xs text-slate-500 -mt-3 mb-4">
+              Changes apply to this preview immediately — click "Save Changes" (or Publish) below to make them permanent.
+            </p>
+            <ImageRedactor
+              dataUrl={reviewableImages.find((r) => r.index === redactorIndex)!.dataUrl}
+              onApply={(redacted) => applyRedaction(redactorIndex, redacted)}
+              onCancel={() => setRedactorIndex(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
