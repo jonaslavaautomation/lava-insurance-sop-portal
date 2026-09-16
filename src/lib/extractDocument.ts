@@ -187,7 +187,7 @@ async function extractPdfPages(file: File): Promise<PageBundle[]> {
     const page = await pdf.getPage(pageNum);
 
     const content = await page.getTextContent();
-    const text = reconstructLayout(content.items);
+    const text = stripRunningFooterNoise(reconstructLayout(content.items));
 
     let images: ExtractedImage[] = [];
     try {
@@ -201,6 +201,84 @@ async function extractPdfPages(file: File): Promise<PageBundle[]> {
   }
 
   return pageBundles;
+}
+
+type Matrix2D = [number, number, number, number, number, number];
+const IDENTITY_MATRIX: Matrix2D = [1, 0, 0, 1, 0, 0];
+
+/** Composes PDF transform `m` (applied first) with the current CTM `t` —
+ *  same order as the `cm` operator's own semantics. */
+function composeMatrix(m: Matrix2D, t: Matrix2D): Matrix2D {
+  return [
+    m[0] * t[0] + m[1] * t[2],
+    m[0] * t[1] + m[1] * t[3],
+    m[2] * t[0] + m[3] * t[2],
+    m[2] * t[1] + m[3] * t[3],
+    m[4] * t[0] + m[5] * t[2] + t[4],
+    m[4] * t[1] + m[5] * t[3] + t[5],
+  ];
+}
+
+function applyMatrix(m: Matrix2D, x: number, y: number): [number, number] {
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+}
+
+interface PageRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Every `paintImageXObject` call paints into the unit square [0,1]x[0,1] as
+ * positioned by the current transform (CTM) at that point in the operator
+ * list — walking save/restore/transform ops the same way a PDF renderer
+ * does recovers each image's actual rectangle on the page, in the same
+ * units as every other image's, regardless of scale.
+ */
+function computeImagePageRects(pdfjsLib: typeof import('pdfjs-dist'), opList: { fnArray: number[]; argsArray: unknown[] }): Map<string, PageRect> {
+  const rects = new Map<string, PageRect>();
+  let ctm: Matrix2D = IDENTITY_MATRIX;
+  const stack: Matrix2D[] = [];
+
+  for (let i = 0; i < opList.fnArray.length; i++) {
+    const fn = opList.fnArray[i];
+    if (fn === pdfjsLib.OPS.save) {
+      stack.push(ctm);
+    } else if (fn === pdfjsLib.OPS.restore) {
+      ctm = stack.pop() ?? IDENTITY_MATRIX;
+    } else if (fn === pdfjsLib.OPS.transform) {
+      const m = opList.argsArray[i] as Matrix2D;
+      ctm = composeMatrix(m, ctm);
+    } else if (fn === pdfjsLib.OPS.paintImageXObject) {
+      const objId = opList.argsArray[i] as unknown as string[];
+      const corners = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => applyMatrix(ctm, x, y));
+      const xs = corners.map((c) => c[0]);
+      const ys = corners.map((c) => c[1]);
+      rects.set(objId[0], { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) });
+    }
+  }
+  return rects;
+}
+
+function rectArea(r: PageRect): number {
+  return Math.max(0, r.x1 - r.x0) * Math.max(0, r.y1 - r.y0);
+}
+
+/** True if `inner` sits inside `outer` (with a little slack for rounding/
+ *  anti-aliasing) and is meaningfully smaller — the literal geometry of a
+ *  callout/highlight box drawn as its own image on top of a bigger
+ *  screenshot, regardless of the callout's size, color, or how blank or
+ *  content-filled either image's pixels are. */
+function isNestedWithin(inner: PageRect, outer: PageRect): boolean {
+  const slack = 2; // page-space units of tolerance
+  const fits =
+    inner.x0 >= outer.x0 - slack &&
+    inner.y0 >= outer.y0 - slack &&
+    inner.x1 <= outer.x1 + slack &&
+    inner.y1 <= outer.y1 + slack;
+  return fits && rectArea(inner) < rectArea(outer) * 0.6;
 }
 
 async function extractPdfPageImages(
@@ -219,6 +297,26 @@ async function extractPdfPageImages(
   }
   if (objIds.length === 0) return [];
 
+  const pageRects = computeImagePageRects(pdfjsLib, opList);
+  // A callout/highlight box some SOP tools draw as its own image layered on
+  // top of the real screenshot (e.g. a red rectangle pointing at one field)
+  // is often well over the old 40x40 "tiny icon" pixel cutoff (up to
+  // ~500x170px seen in the wild), so that size check alone doesn't catch
+  // it. What's unambiguous regardless of the callout's size/color/content
+  // is its PLACEMENT: it's painted entirely inside a bigger image's own
+  // rectangle on the same page - the literal geometry of "on top of".
+  const nestedObjIds = new Set(
+    objIds.filter((id) => {
+      const r = pageRects.get(id);
+      if (!r) return false;
+      return objIds.some((otherId) => {
+        if (otherId === id) return false;
+        const other = pageRects.get(otherId);
+        return other ? isNestedWithin(r, other) : false;
+      });
+    })
+  );
+
   // Rendering the page is what actually decodes images into page.objs —
   // getOperatorList() alone only lists *that* images are painted, not
   // their pixel data.
@@ -233,6 +331,7 @@ async function extractPdfPageImages(
   const images: ExtractedImage[] = [];
   for (const objId of objIds) {
     try {
+      if (nestedObjIds.has(objId)) continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const obj = (page.objs as any).get(objId);
       const bitmap: ImageBitmap | undefined =
@@ -268,6 +367,31 @@ interface PositionedTextItem {
  * lines (versus the page's typical single-line spacing) to tell an actual
  * paragraph break from a line that just wrapped.
  */
+// Some SOP-authoring tools stamp a running "How To <title> Step N of M"
+// progress footer on every page. When that footer's line sits close enough
+// (in the PDF's own vertical spacing) to the very next heading, reconstruct-
+// Layout's gap-based paragraph-break heuristic doesn't insert a break
+// between them - the footer and the next "Step N+1" heading end up glued
+// onto one reconstructed line, e.g. "...How To Save New Submission in IMS
+// Step 07 of 10 STEP 08 Select the Quote Type...". Since STEP_HEADING_RE
+// (splitIntoSteps.ts) only recognizes a heading at the start of a line -
+// deliberately, to avoid matching an incidental "step 2" inside ordinary
+// prose - a heading stuck mid-line like this is invisible to it, and that
+// whole step silently disappears into the previous one's description.
+//
+// "Step N of M" is a highly specific, unambiguous footer signature (real
+// instructional text essentially never phrases itself that way), so it's
+// safe to strip unconditionally rather than trying to make the general
+// layout/paragraph-break heuristic itself aware of this one tool's footer
+// convention. Removing it restores the paragraph break that was already
+// correctly placed just BEFORE the footer, which is what lets the
+// following heading correctly start its own line again.
+const RUNNING_FOOTER_RE = /\bHow\s+To\b[^\n]*?\bStep\s+\d{1,3}\s+of\s+\d{1,3}\b[.,]?\s*/gi;
+
+function stripRunningFooterNoise(text: string): string {
+  return text.replace(RUNNING_FOOTER_RE, '');
+}
+
 function reconstructLayout(items: unknown[]): string {
   const positioned: PositionedTextItem[] = items
     .filter((item): item is { str: string; transform: number[] } => {
