@@ -12,6 +12,18 @@ function isSourceType(value: string | undefined): value is CompanySourceType {
   return value === 'carrier' || value === 'ams';
 }
 
+// Time-based personalized greeting for the portal's landing heading -
+// first name only, derived from the signed-in user's own profile (never
+// hardcoded). Falls back to a generic greeting if no name is on file,
+// never rendering "undefined"/"null"/empty.
+function getGreeting(fullName: string | undefined | null): string {
+  const firstName = (fullName ?? '').trim().split(/\s+/)[0];
+  if (!firstName) return 'Welcome back! 👋';
+  const hour = new Date().getHours();
+  const timeOfDay = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening';
+  return `Good ${timeOfDay}, ${firstName}! 👋`;
+}
+
 // Hover tooltip shown over a carrier/AMS logo - name + how many published
 // SOPs it has. The parent element must have `relative group/logo` - a
 // NAMED group, deliberately, so hovering one logo doesn't also reveal
@@ -282,7 +294,7 @@ export default function VAPortal() {
           </div>
         ) : !category ? (
           <div>
-            <h2 className="text-base font-semibold text-slate-100 mb-1">What are you looking for?</h2>
+            <h2 className="text-base font-semibold text-slate-100 mb-1">{getGreeting(profile?.full_name)}</h2>
             <p className="text-sm text-slate-500 mb-5">Choose a category to browse its approved SOPs</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
