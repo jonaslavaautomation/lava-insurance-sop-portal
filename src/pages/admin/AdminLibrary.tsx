@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Search, FileText, Eye, ThumbsUp, Archive, CheckCircle, Clock } from 'lucide-react';
 import { supabase, type SopDocument, type InsuranceCompany, type SopEngagement } from '@/lib/supabase';
 import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
@@ -10,10 +10,22 @@ export default function AdminLibrary() {
   const [engagement, setEngagement] = useState<Record<string, SopEngagement>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // AdminAMS/AdminCompanies cards link here with ?company=<id>&type=ams (or
+  // carrier) to jump straight to that one source's SOPs pre-filtered - so
+  // clicking a card answers "what SOPs exist for this AMS/carrier, and
+  // what's missing" without the admin re-picking the filter by hand. Read
+  // once at mount (this page always mounts fresh when navigated to from
+  // elsewhere, since it's a different route) rather than watched on every
+  // render, so manually changing the filters afterward isn't fought by a
+  // stale URL param.
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [filterCompany, setFilterCompany] = useState('all');
+  const [filterCompany, setFilterCompany] = useState(() => searchParams.get('company') ?? 'all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterType, setFilterType] = useState<'all' | 'carrier' | 'ams'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'carrier' | 'ams'>(() => {
+    const t = searchParams.get('type');
+    return t === 'carrier' || t === 'ams' ? t : 'all';
+  });
   const [activeCategory, setActiveCategory] = useState('ALL');
 
   useEffect(() => {
@@ -113,6 +125,21 @@ export default function AdminLibrary() {
     <div className="p-8">
       <h1 className="text-3xl font-bold text-slate-50 mb-1">SOP Library</h1>
       <p className="text-slate-500 text-base mb-6">Browse, search, and manage all SOP documents</p>
+
+      {filterCompany !== 'all' && companyMap[filterCompany] && (
+        <div className="flex items-center justify-between gap-3 bg-brand-500/[0.06] border border-brand-500/20 rounded-lg px-4 py-3 mb-4">
+          <p className="text-sm text-slate-200">
+            Showing SOPs for <span className="font-semibold">{companyMap[filterCompany]}</span>
+            {filtered.length === 0 && !loading && ' — none yet.'}
+          </p>
+          <button
+            onClick={() => setFilterCompany('all')}
+            className="text-xs font-medium text-brand-400 hover:text-brand-300 flex-shrink-0"
+          >
+            Show all sources
+          </button>
+        </div>
+      )}
 
       <div className="bg-[#121723]/80 border border-white/[0.08] rounded-xl p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">

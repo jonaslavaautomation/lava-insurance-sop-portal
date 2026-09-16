@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Building2, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
 import { supabase, type InsuranceCompany } from '@/lib/supabase';
 import { EmptyState, ErrorState, LoadingState } from '@/components/admin/DataStates';
 import { CarrierLogo } from '@/components/CarrierLogo';
 
 export default function AdminCompanies() {
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState<InsuranceCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -115,7 +117,11 @@ export default function AdminCompanies() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {companies.map((company) => (
-            <div key={company.id} className="bg-[#121723]/80 rounded-xl border border-white/[0.08] p-6 hover:border-white/[0.15] transition-colors group">
+            <button
+              key={company.id}
+              onClick={() => navigate(`/admin/library?type=carrier&company=${company.id}`)}
+              className="text-left bg-[#121723]/80 rounded-xl border border-white/[0.08] p-6 hover:border-brand-500/40 hover:bg-[#161c2b] transition-all group"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3.5">
                   <CarrierLogo name={company.name} size={44} />
@@ -124,19 +130,25 @@ export default function AdminCompanies() {
                     <p className="text-xs text-slate-500 font-mono mt-0.5">{new Date(company.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(company.id, company.name)}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(company.id, company.name); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleDelete(company.id, company.name); } }}
                   className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                   aria-label={`Delete ${company.name}`}
                 >
                   <Trash2 className="w-5 h-5" />
-                </button>
+                </span>
               </div>
               <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
                 <FileText className="w-4 h-4" />
                 {docCounts[company.id] ?? 0} SOP document{(docCounts[company.id] ?? 0) !== 1 ? 's' : ''}
               </div>
-            </div>
+              <p className="mt-3 text-xs text-brand-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                Click to view its SOPs →
+              </p>
+            </button>
           ))}
         </div>
       )}
