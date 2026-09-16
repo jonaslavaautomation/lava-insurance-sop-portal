@@ -26,24 +26,25 @@ export default function AdminAMS() {
   async function load() {
     setLoading(true);
     setError(null);
-    const { data, error: loadError } = await supabase.from('insurance_companies').select('*').eq('type', 'ams').order('name');
+    // One query for the AMS rows, one for EVERY AMS's doc counts (grouped
+    // client-side) - not one count query per AMS in a for-loop (that used
+    // to make this page's load time scale with the number of AMS
+    // platforms). See the identical fix + comment in AdminCompanies.tsx.
+    const [{ data, error: loadError }, { data: docRows, error: docsError }] = await Promise.all([
+      supabase.from('insurance_companies').select('*').eq('type', 'ams').order('name'),
+      supabase.from('sop_documents').select('insurance_company_id'),
+    ]);
     if (loadError) {
       setError(loadError.message);
       setLoading(false);
       return;
     }
-    const list = data ?? [];
-    setSystems(list);
-
-    const counts: Record<string, number> = {};
-    for (const s of list) {
-      const { count } = await supabase
-        .from('sop_documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('insurance_company_id', s.id);
-      counts[s.id] = count ?? 0;
+    setSystems(data ?? []);
+    if (!docsError && docRows) {
+      const counts: Record<string, number> = {};
+      for (const row of docRows) counts[row.insurance_company_id] = (counts[row.insurance_company_id] ?? 0) + 1;
+      setDocCounts(counts);
     }
-    setDocCounts(counts);
     setLoading(false);
   }
 

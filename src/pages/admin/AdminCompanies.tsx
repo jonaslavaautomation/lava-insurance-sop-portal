@@ -18,24 +18,27 @@ export default function AdminCompanies() {
   async function load() {
     setLoading(true);
     setError(null);
-    const { data, error: loadError } = await supabase.from('insurance_companies').select('*').eq('type', 'carrier').order('name');
+    // One query for the company rows, one for EVERY company's doc counts
+    // (grouped client-side) - not one count query per company. The
+    // previous version awaited a separate query per company inside a
+    // for-loop, so this page's load time used to scale with the number of
+    // carriers (each round-trip waiting for the last to finish); now it's
+    // always exactly 2 queries no matter how many carriers exist.
+    const [{ data, error: loadError }, { data: docRows, error: docsError }] = await Promise.all([
+      supabase.from('insurance_companies').select('*').eq('type', 'carrier').order('name'),
+      supabase.from('sop_documents').select('insurance_company_id'),
+    ]);
     if (loadError) {
       setError(loadError.message);
       setLoading(false);
       return;
     }
-    const companyList = data ?? [];
-    setCompanies(companyList);
-
-    const counts: Record<string, number> = {};
-    for (const c of companyList) {
-      const { count } = await supabase
-        .from('sop_documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('insurance_company_id', c.id);
-      counts[c.id] = count ?? 0;
+    setCompanies(data ?? []);
+    if (!docsError && docRows) {
+      const counts: Record<string, number> = {};
+      for (const row of docRows) counts[row.insurance_company_id] = (counts[row.insurance_company_id] ?? 0) + 1;
+      setDocCounts(counts);
     }
-    setDocCounts(counts);
     setLoading(false);
   }
 

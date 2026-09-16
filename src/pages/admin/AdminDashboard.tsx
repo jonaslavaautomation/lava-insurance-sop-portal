@@ -39,12 +39,19 @@ export default function AdminDashboard() {
       setError(null);
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
+      // All 12 queries below are independent of each other - fired in one
+      // Promise.all so they share a single round-trip's worth of latency.
+      // This used to be two separate awaited Promise.all batches (stats,
+      // then telemetry) even though telemetry doesn't depend on stats at
+      // all - that serialized two full round-trips back-to-back on every
+      // dashboard load for no reason.
       const [
         companiesRes, companiesThisMonthRes,
         documentsRes, documentsThisMonthRes,
         publishedRes2, pendingRes,
         engagementRes,
         dailyPointsRes,
+        viewsRes, likesRes, publishedRes, uploadsRes,
       ] = await Promise.all([
         supabase.from('insurance_companies').select('*', { count: 'exact', head: true }),
         supabase.from('insurance_companies').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
@@ -54,6 +61,10 @@ export default function AdminDashboard() {
         supabase.from('sop_documents').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.rpc('get_sop_engagement', { p_sop_ids: null, p_since: null }),
         supabase.rpc('get_engagement_daily', { p_days: 90 }),
+        supabase.from('sop_views').select('id, created_at, sop_documents(title)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('sop_likes').select('id, created_at, sop_documents(title)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('sop_versions').select('id, created_at, status, sop_documents(title)').eq('status', 'published').order('created_at', { ascending: false }).limit(5),
+        supabase.from('sop_documents').select('id, created_at, title').order('created_at', { ascending: false }).limit(5),
       ]);
       const { count: companies } = companiesRes;
       const { count: companiesThisMonth } = companiesThisMonthRes;
@@ -67,7 +78,7 @@ export default function AdminDashboard() {
       // Surface a genuine fetch failure instead of silently showing every
       // KPI as 0, which reads as "there's really nothing here yet" rather
       // than "the data couldn't load".
-      const firstError = [companiesRes, companiesThisMonthRes, documentsRes, documentsThisMonthRes, publishedRes2, pendingRes, engagementRes, dailyPointsRes]
+      const firstError = [companiesRes, companiesThisMonthRes, documentsRes, documentsThisMonthRes, publishedRes2, pendingRes, engagementRes, dailyPointsRes, viewsRes, likesRes, publishedRes, uploadsRes]
         .map((r) => r.error)
         .find((e) => e);
       if (firstError) setError(firstError.message);
@@ -89,13 +100,6 @@ export default function AdminDashboard() {
 
       // Recent activity, merged from the real log tables and anonymized
       // (no user identity shown) - not a fabricated feed.
-      const [viewsRes, likesRes, publishedRes, uploadsRes] = await Promise.all([
-        supabase.from('sop_views').select('id, created_at, sop_documents(title)').order('created_at', { ascending: false }).limit(5),
-        supabase.from('sop_likes').select('id, created_at, sop_documents(title)').order('created_at', { ascending: false }).limit(5),
-        supabase.from('sop_versions').select('id, created_at, status, sop_documents(title)').eq('status', 'published').order('created_at', { ascending: false }).limit(5),
-        supabase.from('sop_documents').select('id, created_at, title').order('created_at', { ascending: false }).limit(5),
-      ]);
-
       type Embedded = { id: string; created_at: string; sop_documents: { title: string } | { title: string }[] | null };
       const titleOf = (row: Embedded) => {
         const sd = row.sop_documents;

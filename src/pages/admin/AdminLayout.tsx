@@ -61,6 +61,16 @@ export default function AdminLayout() {
   const [recentsOpen, setRecentsOpen] = useState(() => readBoolPref(RECENTS_KEY, true));
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
+  // This layout stays mounted for the whole /admin section - only the
+  // Outlet's child changes as you navigate between Dashboard/Companies/
+  // Library/etc, so a [] dependency here means these 5 queries fire once
+  // per admin session instead of once per click. This used to depend on
+  // location.pathname, which refired all 5 on every single navigation -
+  // competing with whatever the destination page was itself trying to
+  // load and making every click feel sluggish. The tradeoff is that sidebar
+  // counts (e.g. "Pending Reviews") can go stale until the next full page
+  // load/refresh - acceptable since they're a secondary nav badge, not the
+  // page's own data.
   useEffect(() => {
     async function load() {
       const [
@@ -81,7 +91,8 @@ export default function AdminLayout() {
       setRecentDocs((recent as SopDocument[]) ?? []);
     }
     load();
-  }, [location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+B toggles the sidebar -
   // both ignored while typing in an input/textarea/select.
