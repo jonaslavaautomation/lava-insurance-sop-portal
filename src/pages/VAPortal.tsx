@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus, Activity, TrendingUp } from 'lucide-react';
-import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement, type CompanyVisit, type TopVisitedCompany } from '@/lib/supabase';
+import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement, type CompanyVisit, type TopVisitedCompany, type CompanySubmission } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { CarrierLogo } from '@/components/CarrierLogo';
 import { StepsViewer } from '@/components/StepsViewer';
@@ -74,9 +74,13 @@ export default function VAPortal() {
   // tooltip on each carrier/AMS logo (see CompanyHoverCard below).
   const [sopCounts, setSopCounts] = useState<Record<string, number>>({});
   // "Who's browsing what" feed on the landing page - masked_email is
-  // already-masked server-side (see get_recent_company_visits), the real
-  // email is never sent to the browser at all.
+  // already-masked server-side (see get_recent_company_visits /
+  // get_recent_company_submissions), the real email is never sent to the
+  // browser at all. Two separate event types (visited vs submitted a new
+  // SOP), merged into one chronological feed for display - see
+  // activityFeed below.
   const [recentVisits, setRecentVisits] = useState<CompanyVisit[]>([]);
+  const [recentSubmissions, setRecentSubmissions] = useState<CompanySubmission[]>([]);
   const [topVisited, setTopVisited] = useState<TopVisitedCompany | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -129,17 +133,45 @@ export default function VAPortal() {
   // than blocking the whole page with loadError.
   useEffect(() => {
     async function loadActivity() {
-      const [{ data: visits, error: visitsError }, { data: top, error: topError }] = await Promise.all([
+      const [
+        { data: visits, error: visitsError },
+        { data: submissions, error: submissionsError },
+        { data: top, error: topError },
+      ] = await Promise.all([
         supabase.rpc('get_recent_company_visits', { p_limit: 12 }),
+        supabase.rpc('get_recent_company_submissions', { p_limit: 12 }),
         supabase.rpc('get_top_visited_company'),
       ]);
       if (visitsError) console.error('Activity feed error:', visitsError);
       else setRecentVisits((visits as CompanyVisit[]) ?? []);
+      if (submissionsError) console.error('Submission activity error:', submissionsError);
+      else setRecentSubmissions((submissions as CompanySubmission[]) ?? []);
       if (topError) console.error('Top visited company error:', topError);
       else setTopVisited(((top as TopVisitedCompany[]) ?? [])[0] ?? null);
     }
     loadActivity();
   }, []);
+
+  // Two different event shapes (visited vs submitted a new SOP), merged
+  // into one chronological feed - most recent first, capped at 12 total.
+  const activityFeed = useMemo(() => {
+    const visitEntries = recentVisits.map((v) => ({
+      kind: 'visit' as const,
+      maskedEmail: v.masked_email,
+      companyName: v.company_name,
+      at: v.viewed_at,
+    }));
+    const submissionEntries = recentSubmissions.map((s) => ({
+      kind: 'submission' as const,
+      maskedEmail: s.masked_email,
+      companyName: s.company_name,
+      sopTitle: s.sop_title,
+      at: s.submitted_at,
+    }));
+    return [...visitEntries, ...submissionEntries]
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 12);
+  }, [recentVisits, recentSubmissions]);
 
   // A URL like /portal/carrier/<garbage-id> is possible (stale link, typo) -
   // redirect back to the grid once we've actually loaded companies and
@@ -397,7 +429,7 @@ export default function VAPortal() {
               </div>
             )}
 
-            {recentVisits.length > 0 && (
+            {activityFeed.length > 0 && (
               <div className="mt-4 bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5">
                 <div className="flex items-center gap-2.5 mb-4">
                   <div className="w-8 h-8 bg-white/[0.04] rounded-md flex items-center justify-center">
@@ -405,19 +437,32 @@ export default function VAPortal() {
                   </div>
                   <div>
                     <p className="text-[13px] font-semibold text-slate-100">Recent Activity</p>
-                    <p className="text-xs text-slate-500">Who's been browsing the portal</p>
+                    <p className="text-xs text-slate-500">Who's been browsing — and submitting SOPs</p>
                   </div>
                 </div>
                 <div className="space-y-2.5 max-h-72 overflow-y-auto">
-                  {recentVisits.map((v, i) => (
+                  {activityFeed.map((entry, i) => (
                     <div key={i} className="flex items-center gap-3 text-sm">
-                      <CarrierLogo name={v.company_name} size={24} />
-                      <p className="text-slate-400 truncate min-w-0">
-                        <span className="text-slate-200 font-mono text-[13px]">{v.masked_email}</span>
-                        {' visited '}
-                        <span className="text-slate-200 font-medium">&ldquo;{v.company_name}&rdquo;</span>
-                      </p>
-                      <span className="text-[11px] text-slate-600 font-mono flex-shrink-0 ml-auto">{timeAgo(v.viewed_at)}</span>
+                      <CarrierLogo name={entry.companyName} size={24} />
+                      {entry.kind === 'submission' ? (
+                        <>
+                          <p className="text-slate-400 truncate min-w-0">
+                            <span className="text-slate-200 font-mono text-[13px]">{entry.maskedEmail}</span>
+                            {' submitted a new SOP for '}
+                            <span className="text-slate-200 font-medium">&ldquo;{entry.companyName}&rdquo;</span>
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-brand-400 bg-brand-500/10 border border-brand-500/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                            <FilePlus className="w-2.5 h-2.5" /> New SOP
+                          </span>
+                        </>
+                      ) : (
+                        <p className="text-slate-400 truncate min-w-0">
+                          <span className="text-slate-200 font-mono text-[13px]">{entry.maskedEmail}</span>
+                          {' visited '}
+                          <span className="text-slate-200 font-medium">&ldquo;{entry.companyName}&rdquo;</span>
+                        </p>
+                      )}
+                      <span className="text-[11px] text-slate-600 font-mono flex-shrink-0 ml-auto">{timeAgo(entry.at)}</span>
                     </div>
                   ))}
                 </div>

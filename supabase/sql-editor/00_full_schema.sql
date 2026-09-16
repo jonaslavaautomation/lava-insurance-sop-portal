@@ -622,6 +622,42 @@ AS $$
   LIMIT 1;
 $$;
 
+-- VA-facing, same masking/scoping rationale as get_recent_company_visits
+-- above - a submission is a 'pending' sop_documents row, which
+-- sop_docs_select correctly keeps hidden from anyone but its own
+-- submitter or an admin. This returns only the pre-masked shape the
+-- activity feed needs, scoped to role = 'va_student' so an admin's own
+-- upload doesn't show up as "community activity" the same way a VA's
+-- submission does (uploaded_by is set the same way for both).
+DROP FUNCTION IF EXISTS get_recent_company_submissions(int);
+CREATE FUNCTION get_recent_company_submissions(p_limit int DEFAULT 20)
+RETURNS TABLE (
+  masked_email text,
+  company_id uuid,
+  company_name text,
+  company_type text,
+  sop_title text,
+  submitted_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    left(p.email, 1) || '******@' || split_part(p.email, '@', 2) AS masked_email,
+    ic.id,
+    ic.name,
+    ic.type,
+    d.title,
+    d.created_at
+  FROM sop_documents d
+  JOIN profiles p ON p.id = d.uploaded_by
+  JOIN insurance_companies ic ON ic.id = d.insurance_company_id
+  WHERE p.role = 'va_student'
+  ORDER BY d.created_at DESC
+  LIMIT LEAST(GREATEST(COALESCE(p_limit, 20), 1), 100);
+$$;
+
 -- ============================================================
 -- AMS (Agency Management System) AS A SECOND SOP SOURCE TYPE
 -- ============================================================

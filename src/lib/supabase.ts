@@ -201,3 +201,15 @@ export interface TopVisitedCompany {
   company_type: CompanySourceType;
   view_count: number;
 }
+
+/** One entry in the "a VA submitted a new SOP" feed, from
+ *  get_recent_company_submissions() - same already-masked-in-SQL email as
+ *  CompanyVisit, scoped to va_student submitters only (not admin uploads). */
+export interface CompanySubmission {
+  masked_email: string;
+  company_id: string;
+  company_name: string;
+  company_type: CompanySourceType;
+  sop_title: string;
+  submitted_at: string;
+}
