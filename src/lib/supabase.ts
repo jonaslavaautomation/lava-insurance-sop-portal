@@ -182,3 +182,22 @@ export interface EngagementDailyPoint {
   view_count: number;
   like_count: number;
 }
+
+/** One entry in the VA portal's "who's browsing what" feed. `masked_email`
+ *  comes back already-masked from get_recent_company_visits() - the real
+ *  email is never sent to the browser at all. */
+export interface CompanyVisit {
+  masked_email: string;
+  company_id: string;
+  company_name: string;
+  company_type: CompanySourceType;
+  viewed_at: string;
+}
+
+/** The single most-viewed carrier/AMS, from get_top_visited_company(). */
+export interface TopVisitedCompany {
+  company_id: string;
+  company_name: string;
+  company_type: CompanySourceType;
+  view_count: number;
+}

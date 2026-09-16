@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus } from 'lucide-react';
-import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement } from '@/lib/supabase';
+import { Search, Building2, Server, FileText, ChevronRight, ChevronLeft, Loader2, Info, X, LogOut, Eye, ThumbsUp, Check, FilePlus, Activity, TrendingUp } from 'lucide-react';
+import { supabase, fetchSopContent, type InsuranceCompany, type CompanySourceType, type SearchResult, type SopContentDetail, type SopEngagement, type CompanyVisit, type TopVisitedCompany } from '@/lib/supabase';
 import { LavaLogo } from '@/components/LavaLogo';
 import { CarrierLogo } from '@/components/CarrierLogo';
 import { StepsViewer } from '@/components/StepsViewer';
@@ -10,6 +10,17 @@ import { useAuth } from '@/context/AuthContext';
 
 function isSourceType(value: string | undefined): value is CompanySourceType {
   return value === 'carrier' || value === 'ams';
+}
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 // Time-based personalized greeting for the portal's landing heading -
@@ -62,6 +73,11 @@ export default function VAPortal() {
   // would actually find searching, shown as extra info in the hover
   // tooltip on each carrier/AMS logo (see CompanyHoverCard below).
   const [sopCounts, setSopCounts] = useState<Record<string, number>>({});
+  // "Who's browsing what" feed on the landing page - masked_email is
+  // already-masked server-side (see get_recent_company_visits), the real
+  // email is never sent to the browser at all.
+  const [recentVisits, setRecentVisits] = useState<CompanyVisit[]>([]);
+  const [topVisited, setTopVisited] = useState<TopVisitedCompany | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -106,6 +122,23 @@ export default function VAPortal() {
       setLoading(false);
     }
     load();
+  }, []);
+
+  // Activity feed - a nice-to-have panel, not core portal functionality,
+  // so a failure here is logged and just leaves the panel empty rather
+  // than blocking the whole page with loadError.
+  useEffect(() => {
+    async function loadActivity() {
+      const [{ data: visits, error: visitsError }, { data: top, error: topError }] = await Promise.all([
+        supabase.rpc('get_recent_company_visits', { p_limit: 12 }),
+        supabase.rpc('get_top_visited_company'),
+      ]);
+      if (visitsError) console.error('Activity feed error:', visitsError);
+      else setRecentVisits((visits as CompanyVisit[]) ?? []);
+      if (topError) console.error('Top visited company error:', topError);
+      else setTopVisited(((top as TopVisitedCompany[]) ?? [])[0] ?? null);
+    }
+    loadActivity();
   }, []);
 
   // A URL like /portal/carrier/<garbage-id> is possible (stale link, typo) -
@@ -350,6 +383,46 @@ export default function VAPortal() {
                 </div>
               </button>
             </div>
+
+            {topVisited && (
+              <div className="mt-6 flex items-center gap-3 bg-brand-500/[0.06] border border-brand-500/20 rounded-lg px-4 py-3.5">
+                <div className="w-8 h-8 bg-brand-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-4 h-4 text-brand-400" />
+                </div>
+                <CarrierLogo name={topVisited.company_name} size={28} />
+                <p className="text-sm text-slate-200">
+                  <span className="font-semibold">{topVisited.company_name}</span> is the most visited {topVisited.company_type === 'ams' ? 'AMS' : 'carrier'} in the portal
+                  <span className="text-slate-500"> · {topVisited.view_count} view{topVisited.view_count !== 1 ? 's' : ''}</span>
+                </p>
+              </div>
+            )}
+
+            {recentVisits.length > 0 && (
+              <div className="mt-4 bg-[#121723]/80 border border-white/[0.08] rounded-lg p-5">
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-8 h-8 bg-white/[0.04] rounded-md flex items-center justify-center">
+                    <Activity className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-100">Recent Activity</p>
+                    <p className="text-xs text-slate-500">Who's been browsing the portal</p>
+                  </div>
+                </div>
+                <div className="space-y-2.5 max-h-72 overflow-y-auto">
+                  {recentVisits.map((v, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm">
+                      <CarrierLogo name={v.company_name} size={24} />
+                      <p className="text-slate-400 truncate min-w-0">
+                        <span className="text-slate-200 font-mono text-[13px]">{v.masked_email}</span>
+                        {' visited '}
+                        <span className="text-slate-200 font-medium">&ldquo;{v.company_name}&rdquo;</span>
+                      </p>
+                      <span className="text-[11px] text-slate-600 font-mono flex-shrink-0 ml-auto">{timeAgo(v.viewed_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : !companyId ? (
           <>
