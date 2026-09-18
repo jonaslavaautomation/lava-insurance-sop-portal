@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, type Profile } from '@/lib/supabase';
 
@@ -18,6 +18,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Tracks whose profile is currently loaded, so onAuthStateChange (below)
+  // can tell a real sign-in apart from a same-user token refresh.
+  const currentUserIdRef = useRef<string | null>(null);
 
   async function loadProfile(userId: string) {
     const { data, error } = await supabase
@@ -35,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
+        currentUserIdRef.current = session.user.id;
         loadProfile(session.user.id).finally(() => setLoading(false));
       } else {
         setLoading(false);
@@ -43,18 +47,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) {
-        // `loading` covers this too, not just the very first getSession()
-        // call above — without it, ProtectedRoute sees a truthy session
-        // with a still-null profile (e.g. right after Google sign-in) and,
-        // since it only gates on `loading`, would briefly treat an
-        // unverified-role user as authorized. See ProtectedRoute.tsx.
-        setLoading(true);
-        loadProfile(session.user.id).finally(() => setLoading(false));
-      } else {
+
+      if (!session?.user) {
+        currentUserIdRef.current = null;
         setProfile(null);
         setLoading(false);
+        return;
       }
+
+      // supabase-js silently refreshes the access token on a timer, AND
+      // whenever the tab regains focus/visibility - both fire this same
+      // callback with the SAME user, not just an actual sign-in. Treating
+      // every firing as "go loading" made ProtectedRoute blank the whole
+      // app back to its full-screen "Loading..." (see ProtectedRoute.tsx)
+      // every time you switched back to the tab, which looked like the
+      // app was reloading itself. Skip the loading flash + profile
+      // refetch when it's the same user as before - there's nothing new
+      // to load.
+      if (session.user.id === currentUserIdRef.current) return;
+
+      currentUserIdRef.current = session.user.id;
+      // `loading` covers this too, not just the very first getSession()
+      // call above — without it, ProtectedRoute sees a truthy session
+      // with a still-null profile (e.g. right after Google sign-in) and,
+      // since it only gates on `loading`, would briefly treat an
+      // unverified-role user as authorized. See ProtectedRoute.tsx.
+      setLoading(true);
+      loadProfile(session.user.id).finally(() => setLoading(false));
     });
 
     return () => subscription.unsubscribe();
