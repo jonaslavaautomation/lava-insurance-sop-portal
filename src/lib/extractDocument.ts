@@ -281,6 +281,23 @@ function isNestedWithin(inner: PageRect, outer: PageRect): boolean {
   return fits && rectArea(inner) < rectArea(outer) * 0.6;
 }
 
+/** Maps a page-space rectangle (from computeImagePageRects, in the PDF's own
+ *  user-space units) to pixel coordinates on the canvas a page was rendered
+ *  into at a given viewport — same composed-matrix approach as CTM tracking
+ *  above, just using the viewport's own transform. */
+function toCanvasRect(viewport: import('pdfjs-dist').PageViewport, rect: PageRect): PageRect {
+  const t = viewport.transform as Matrix2D;
+  const corners = [
+    [rect.x0, rect.y0],
+    [rect.x1, rect.y0],
+    [rect.x0, rect.y1],
+    [rect.x1, rect.y1],
+  ].map(([x, y]) => applyMatrix(t, x, y));
+  const xs = corners.map((c) => c[0]);
+  const ys = corners.map((c) => c[1]);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+}
+
 async function extractPdfPageImages(
   pdfjsLib: typeof import('pdfjs-dist'),
   page: import('pdfjs-dist').PDFPageProxy,
@@ -317,9 +334,6 @@ async function extractPdfPageImages(
     })
   );
 
-  // Rendering the page is what actually decodes images into page.objs —
-  // getOperatorList() alone only lists *that* images are painted, not
-  // their pixel data.
   const viewport = page.getViewport({ scale: 1.5 });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
@@ -328,29 +342,42 @@ async function extractPdfPageImages(
   if (!ctx) return [];
   await page.render({ canvasContext: ctx, viewport, canvas }).promise;
 
+  // Cropped straight out of the fully-rendered page canvas at each image's
+  // own on-page rectangle, rather than pulling the raw decoded bitmap out
+  // of page.objs/commonObjs directly. Some PDFs (large photographic
+  // screenshots in particular) leave that object cache holding an
+  // intermediate, not-yet-decoded record — still carrying its encoded
+  // dataLen/ref, no populated bitmap — even after page.render()'s own
+  // promise has resolved, so reading it synchronously here was a race that
+  // silently produced zero images on every page for those documents. The
+  // page is already fully composited onto `canvas` by this point (that's
+  // what render() just did), so cropping it directly sidesteps that
+  // decode-timing race entirely, works the same regardless of the image's
+  // internal PDF encoding, and - as a bonus - naturally keeps any callout/
+  // highlight overlay actually painted on top instead of silently losing it
+  // (the previous per-object approach only ever captured the base image,
+  // never whatever was composited above it).
   const images: ExtractedImage[] = [];
   for (const objId of objIds) {
-    try {
-      if (nestedObjIds.has(objId)) continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const obj = (page.objs as any).get(objId);
-      const bitmap: ImageBitmap | undefined =
-        obj instanceof ImageBitmap ? obj : obj?.bitmap instanceof ImageBitmap ? obj.bitmap : undefined;
-      if (!bitmap) continue;
-      // Skip tiny images (icons, bullets, decorative rules) — not real photos.
-      if (bitmap.width < 40 || bitmap.height < 40) continue;
+    if (nestedObjIds.has(objId)) continue;
+    const pageRect = pageRects.get(objId);
+    if (!pageRect) continue;
 
-      const out = document.createElement('canvas');
-      out.width = bitmap.width;
-      out.height = bitmap.height;
-      const outCtx = out.getContext('2d');
-      if (!outCtx) continue;
-      outCtx.drawImage(bitmap, 0, 0);
-      images.push({ dataUrl: out.toDataURL('image/png'), page: pageNum });
-    } catch {
-      // Some image ops reference masks/patterns rather than real photos —
-      // just skip whatever doesn't resolve to a plain bitmap.
-    }
+    const canvasRect = toCanvasRect(viewport, pageRect);
+    const sx = Math.max(0, Math.round(canvasRect.x0));
+    const sy = Math.max(0, Math.round(canvasRect.y0));
+    const sw = Math.min(canvas.width, Math.round(canvasRect.x1)) - sx;
+    const sh = Math.min(canvas.height, Math.round(canvasRect.y1)) - sy;
+    // Skip tiny images (icons, bullets, decorative rules) — not real photos.
+    if (sw < 40 || sh < 40) continue;
+
+    const out = document.createElement('canvas');
+    out.width = sw;
+    out.height = sh;
+    const outCtx = out.getContext('2d');
+    if (!outCtx) continue;
+    outCtx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    images.push({ dataUrl: out.toDataURL('image/png'), page: pageNum });
   }
   return images;
 }
