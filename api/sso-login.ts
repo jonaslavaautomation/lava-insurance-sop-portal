@@ -18,20 +18,22 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * anon key. The service_role key and SOP_SSO_SECRET never leave this
  * function.
  *
- * An email with no existing profile here is auto-provisioned as a brand
- * new va_student account (full access intended: every VA signed up in the
- * partner's own dashboard should land here with no separate manual signup
- * step) - but that's the ONLY role this path can ever produce. Two
- * independent guards keep it that way:
- *  - admin.auth.admin.createUser() below never sets provider: 'google' on
- *    the new user, so handle_new_user()'s own admin-allowlist promotion
- *    (which requires exactly that provider) can never fire for an
- *    SSO-created account, even if the email happens to match one of the
- *    six hardcoded admin addresses.
- *  - An EXISTING profile with role 'admin' (e.g. a real admin who already
- *    signed in here directly via Google) is rejected outright - this path
- *    can only ever produce a va_student session, regardless of what the
- *    partner's own data says.
+ * An email with no existing profile here is auto-provisioned as a new
+ * account (full access intended: every VA signed up in the partner's own
+ * dashboard should land here with no separate manual signup step).
+ * admin.auth.admin.createUser() below never sets app_metadata.provider:
+ * 'google', so handle_new_user()'s own admin-allowlist promotion (which
+ * requires exactly that provider) can never fire for an SSO-created
+ * account on its own - a brand new account always starts as va_student.
+ *
+ * The payload also carries isAdmin: the partner's dashboard is a trusted
+ * source for who should land here as an admin (e.g. one of their own
+ * dashboard admins), so isAdmin: true explicitly elevates that email's
+ * profiles.role to 'admin' - this is a deliberate, requested trust
+ * decision, not an incidental side effect. Elevation is one-directional
+ * only: isAdmin: false NEVER strips admin from an account that already
+ * has it for other reasons (e.g. a real admin who signed in directly via
+ * Google) - it simply leaves the role alone either way.
  */
 
 // The token is minted by the partner's backend, then has to survive: the
@@ -39,7 +41,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 // booting this app's full JS bundle (first visit, no cache - can take
 // several seconds on a slow connection), THEN the round trip to this
 // endpoint. 60s turned out to be too tight for that whole chain on a slow
-///cold load, producing an "expired" rejection that looked like a UI race
+// cold load, producing an "expired" rejection that looked like a UI race
 // from the outside. Still tight enough that a captured URL (browser
 // history, a proxy log, a screenshot) is useless within a couple of
 // minutes.
@@ -98,7 +100,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  let parsed: { email?: unknown; iat?: unknown };
+  let parsed: { email?: unknown; iat?: unknown; isAdmin?: unknown };
   try {
     parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
   } catch {
@@ -108,6 +110,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const email = typeof parsed.email === 'string' ? parsed.email.trim().toLowerCase() : null;
   const iat = typeof parsed.iat === 'number' ? parsed.iat : null;
+  // Defaults to false (never elevates) for any token shaped without this
+  // field at all, not just an explicit false - older-shaped tokens from
+  // before this field existed must never be treated as admin requests.
+  const isAdmin = parsed.isAdmin === true;
   if (!email || !iat) {
     res.status(400).json({ error: 'SSO token payload missing email or timestamp.' });
     return;
@@ -168,10 +174,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     profile = freshProfile;
   }
 
-  if (profile.role !== 'va_student') {
-    res.status(403).json({ error: 'This account cannot be signed in through SSO.' });
-    return;
+  if (isAdmin && profile.role !== 'admin') {
+    const { error: elevateError } = await admin
+      .from('profiles')
+      .update({ role: 'admin' })
+      .eq('email', email);
+    if (elevateError) {
+      console.error('SSO admin-elevation error:', elevateError);
+      res.status(500).json({ error: 'Could not finish setting up this account.' });
+      return;
+    }
+    profile = { ...profile, role: 'admin' };
   }
+  // isAdmin === false intentionally falls through here with no action at
+  // all, whatever profile.role already is - see the file's top comment on
+  // why downgrading is never allowed.
 
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
