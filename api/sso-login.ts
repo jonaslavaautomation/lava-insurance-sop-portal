@@ -34,10 +34,16 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *    partner's own data says.
  */
 
-// Generous enough for real network latency between the two servers, tight
-// enough that a captured URL (browser history, a proxy log, a screenshot)
-// is useless within a couple of minutes.
-const MAX_TOKEN_AGE_MS = 60_000;
+// The token is minted by the partner's backend, then has to survive: the
+// network hop to the browser, the embedding iframe cold-downloading and
+// booting this app's full JS bundle (first visit, no cache - can take
+// several seconds on a slow connection), THEN the round trip to this
+// endpoint. 60s turned out to be too tight for that whole chain on a slow
+///cold load, producing an "expired" rejection that looked like a UI race
+// from the outside. Still tight enough that a captured URL (browser
+// history, a proxy log, a screenshot) is useless within a couple of
+// minutes.
+const MAX_TOKEN_AGE_MS = 180_000;
 const MAX_CLOCK_SKEW_MS = 30_000;
 
 // Minimal structural types for Vercel's Node request/response - avoids
