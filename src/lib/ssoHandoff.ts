@@ -37,8 +37,17 @@ export async function completeSsoHandoffIfPresent(): Promise<void> {
       console.error('SSO login failed:', body.error ?? res.statusText);
       return;
     }
-    const { email, tokenHash } = (await res.json()) as { email: string; tokenHash: string };
-    const { error } = await supabase.auth.verifyOtp({ email, token: tokenHash, type: 'magiclink' });
+    const { tokenHash } = (await res.json()) as { email: string; tokenHash: string };
+    // generateLink() on the server hands back a HASHED token meant for the
+    // token_hash parameter here - not the `token` parameter, which expects
+    // a plain 6-digit OTP code instead (a different shape of the same
+    // verifyOtp() call, for emailed-code flows). Using the wrong one looks
+    // like success up to this point (the server-side exchange genuinely
+    // succeeds and returns 200) but silently fails right here, since
+    // Supabase can't match a hashed token against the plain-token shape -
+    // no session gets set, and nothing surfaces to the page beyond this
+    // console.error.
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
     if (error) console.error('SSO verifyOtp failed:', error.message);
   } catch (err) {
     console.error('SSO login error:', err);
