@@ -18,15 +18,20 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * anon key. The service_role key and SOP_SSO_SECRET never leave this
  * function.
  *
- * Deliberately conservative on both ends:
- *  - An email with no existing profile here is rejected, not silently
- *    provisioned - SSO only ever signs in a VA already known to this
- *    portal (added by an admin, or who's signed up here before), never
- *    creates a new account on the partner's say-so alone.
- *  - An existing profile with role 'admin' is rejected too - this path can
- *    only ever produce a va_student session, regardless of what the
- *    partner's own data says, as an independent second guard against ever
- *    using SSO to reach an admin account.
+ * An email with no existing profile here is auto-provisioned as a brand
+ * new va_student account (full access intended: every VA signed up in the
+ * partner's own dashboard should land here with no separate manual signup
+ * step) - but that's the ONLY role this path can ever produce. Two
+ * independent guards keep it that way:
+ *  - admin.auth.admin.createUser() below never sets provider: 'google' on
+ *    the new user, so handle_new_user()'s own admin-allowlist promotion
+ *    (which requires exactly that provider) can never fire for an
+ *    SSO-created account, even if the email happens to match one of the
+ *    six hardcoded admin addresses.
+ *  - An EXISTING profile with role 'admin' (e.g. a real admin who already
+ *    signed in here directly via Google) is rejected outright - this path
+ *    can only ever produce a va_student session, regardless of what the
+ *    partner's own data says.
  */
 
 // Generous enough for real network latency between the two servers, tight
@@ -110,21 +115,53 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('role')
-    .eq('email', email)
-    .maybeSingle();
+  async function lookupProfile() {
+    return admin.from('profiles').select('role').eq('email', email as string).maybeSingle();
+  }
 
-  if (profileError) {
-    console.error('SSO profile lookup error:', profileError);
+  const { data: existingProfile, error: lookupError } = await lookupProfile();
+  if (lookupError) {
+    console.error('SSO profile lookup error:', lookupError);
     res.status(500).json({ error: 'Could not verify this account.' });
     return;
   }
+
+  let profile = existingProfile;
   if (!profile) {
-    res.status(404).json({ error: 'No SOP portal account exists for this email yet.' });
-    return;
+    // First time this email has ever reached the SOP portal - provision a
+    // brand new account rather than rejecting it. email_confirm: true
+    // skips the usual "confirm your email" step, since the partner's own
+    // signed token IS the proof of identity here. Deliberately NOT passing
+    // app_metadata.provider: 'google' - see the comment at the top of this
+    // file for why that matters.
+    const { error: createError } = await admin.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    });
+    // A "this email is already registered" error here just means a
+    // concurrent SSO request (e.g. a double-click, or two tabs) already
+    // created the account a moment ago - fall through to re-fetch it
+    // rather than treating that as a failure.
+    if (createError && !/already.*registered|already exists/i.test(createError.message ?? '')) {
+      console.error('SSO auto-provision error:', createError);
+      res.status(500).json({ error: 'Could not create an account for this email.' });
+      return;
+    }
+
+    const { data: freshProfile, error: refetchError } = await lookupProfile();
+    if (refetchError) {
+      console.error('SSO profile re-fetch error:', refetchError);
+      res.status(500).json({ error: 'Could not verify this account.' });
+      return;
+    }
+    if (!freshProfile) {
+      console.error('SSO: profile still missing immediately after createUser for', email);
+      res.status(500).json({ error: 'Could not finish setting up this account.' });
+      return;
+    }
+    profile = freshProfile;
   }
+
   if (profile.role !== 'va_student') {
     res.status(403).json({ error: 'This account cannot be signed in through SSO.' });
     return;
