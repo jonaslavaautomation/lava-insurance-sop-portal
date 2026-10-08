@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, type Profile } from '@/lib/supabase';
+import { completeSsoHandoffIfPresent } from '@/lib/ssoHandoff';
 
 interface AuthContextType {
   session: Session | null;
@@ -35,15 +36,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // If the URL carries a partner VA Dashboard's SSO handoff token (see
+    // ssoHandoff.ts), redeem it FIRST, before the getSession() check below
+    // - a successful redemption persists a brand new session via
+    // verifyOtp(), which getSession() then picks up as if it had always
+    // been there. Deliberately awaited (not fire-and-forget): `loading`
+    // stays true this whole time, so ProtectedRoute shows its normal
+    // full-screen loading state instead of bouncing to /login for the
+    // instant before the exchange finishes - no changes needed there.
+    async function bootstrap() {
+      await completeSsoHandoffIfPresent();
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       if (session?.user) {
         currentUserIdRef.current = session.user.id;
-        loadProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+        await loadProfile(session.user.id);
       }
-    });
+      setLoading(false);
+    }
+    bootstrap();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
